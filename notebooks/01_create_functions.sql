@@ -1,28 +1,37 @@
 -- =============================================================
--- Workshop Module 3: Create UC Functions (Agent Bricks)
--- Run each block in the SQL editor or a notebook %sql cell
--- Target schema: hls_amer_catalog.clinical_workshop
+-- Workshop Module 4: Create UC Functions (Agent Bricks)
+-- Run each block in the SQL editor or a %sql notebook cell
+--
+-- STEP 1: Set the widgets at the top of this notebook.
+--         All function definitions will use those values.
 -- =============================================================
 
-USE CATALOG hls_amer_catalog;
-USE SCHEMA clinical_workshop;
+-- Set your target catalog, schema, and vector index name
+CREATE WIDGET TEXT catalog  DEFAULT 'hls_amer_catalog';
+CREATE WIDGET TEXT schema   DEFAULT 'clinical_workshop';
+CREATE WIDGET TEXT vs_index DEFAULT 'note_events_vs_index';
+
+-- Apply context
+USE CATALOG ${catalog};
+USE SCHEMA  ${schema};
+
 
 -- -------------------------------------------------------------
 -- FUNCTION 1: get_latest_admission
 -- Returns the most recent hospital admission for a patient
 -- Used by: Supervisor Agent to anchor clinical timelines
 -- -------------------------------------------------------------
-CREATE OR REPLACE FUNCTION hls_amer_catalog.clinical_workshop.get_latest_admission(
+CREATE OR REPLACE FUNCTION ${catalog}.${schema}.get_latest_admission(
   patient_id INT COMMENT 'Unique patient identifier (SUBJECT_ID)'
 )
 RETURNS TABLE (
-  SUBJECT_ID INT,
-  HADM_ID    INT,
-  ADMITTIME  DATE,
-  DISCHTIME  DATE,
+  SUBJECT_ID     INT,
+  HADM_ID        INT,
+  ADMITTIME      DATE,
+  DISCHTIME      DATE,
   ADMISSION_TYPE STRING,
-  INSURANCE  STRING,
-  DIAGNOSIS  STRING
+  INSURANCE      STRING,
+  DIAGNOSIS      STRING
 )
 COMMENT 'Returns the most recent admission record for a given patient. Use this to anchor clinical timelines before querying labs or notes.'
 RETURN
@@ -34,13 +43,13 @@ RETURN
     ADMISSION_TYPE,
     INSURANCE,
     DIAGNOSIS
-  FROM hls_amer_catalog.clinical_workshop.admissions
+  FROM ${catalog}.${schema}.admissions
   WHERE SUBJECT_ID = patient_id
   ORDER BY ADMITTIME DESC
   LIMIT 1;
 
 -- Test it
-SELECT * FROM hls_amer_catalog.clinical_workshop.get_latest_admission(22);
+SELECT * FROM ${catalog}.${schema}.get_latest_admission(22);
 
 
 -- -------------------------------------------------------------
@@ -48,7 +57,7 @@ SELECT * FROM hls_amer_catalog.clinical_workshop.get_latest_admission(22);
 -- Returns all abnormal lab results for a given hospital admission
 -- Used by: Supervisor Agent when asked about lab findings
 -- -------------------------------------------------------------
-CREATE OR REPLACE FUNCTION hls_amer_catalog.clinical_workshop.get_abnormal_labs(
+CREATE OR REPLACE FUNCTION ${catalog}.${schema}.get_abnormal_labs(
   admission_id INT COMMENT 'Hospital admission identifier (HADM_ID)'
 )
 RETURNS TABLE (
@@ -70,12 +79,12 @@ RETURN
     VALUE,
     VALUEUOM,
     FLAG
-  FROM hls_amer_catalog.clinical_workshop.lab_events
+  FROM ${catalog}.${schema}.lab_events
   WHERE HADM_ID = admission_id
     AND FLAG = 'abnormal';
 
--- Test it (use a real HADM_ID from your admissions table)
--- SELECT * FROM hls_amer_catalog.clinical_workshop.get_abnormal_labs(135236) LIMIT 10;
+-- Test it (replace with a real HADM_ID from your admissions table)
+-- SELECT * FROM ${catalog}.${schema}.get_abnormal_labs(135236) LIMIT 10;
 
 
 -- -------------------------------------------------------------
@@ -83,7 +92,7 @@ RETURN
 -- Resolves a lab item ID to its human-readable label and category
 -- Used by: Supervisor Agent to interpret lab result IDs
 -- -------------------------------------------------------------
-CREATE OR REPLACE FUNCTION hls_amer_catalog.clinical_workshop.get_lab_type(
+CREATE OR REPLACE FUNCTION ${catalog}.${schema}.get_lab_type(
   abnormal_lab_item_id INT COMMENT 'Lab item identifier (ITEMID) from lab_events'
 )
 RETURNS TABLE (
@@ -94,23 +103,23 @@ RETURNS TABLE (
   CATEGORY   STRING,
   LOINC_CODE STRING
 )
-COMMENT 'Resolves a lab item ID to its label, fluid type, category, and LOINC code. Use after get_abnormal_labs to understand what each lab item represents. Example result: ITEMID=51279, LABEL=Red Blood Cells, FLUID=Blood, CATEGORY=Hematology'
+COMMENT 'Resolves a lab item ID to its label, fluid type, category, and LOINC code. Use after get_abnormal_labs to understand what each lab item represents. Example: ITEMID=51279 -> Red Blood Cells, Blood, Hematology'
 RETURN
   SELECT *
-  FROM hls_amer_catalog.clinical_workshop.d_labitems
+  FROM ${catalog}.${schema}.d_labitems
   WHERE ITEMID = abnormal_lab_item_id;
 
 -- Test it
--- SELECT * FROM hls_amer_catalog.clinical_workshop.get_lab_type(51279);
+-- SELECT * FROM ${catalog}.${schema}.get_lab_type(51279);
 
 
 -- -------------------------------------------------------------
 -- FUNCTION 4: get_clinical_notes
 -- Returns clinical notes for a specific admission on a given date
--- Used by: Supervisor Agent for specific patient-admission lookups
--- NOTE: Use Knowledge Assistant (vector search) for semantic queries
+-- Used by: Supervisor Agent for known patient-admission lookups
+-- NOTE: Use the Knowledge Assistant for semantic/topic queries
 -- -------------------------------------------------------------
-CREATE OR REPLACE FUNCTION hls_amer_catalog.clinical_workshop.get_clinical_notes(
+CREATE OR REPLACE FUNCTION ${catalog}.${schema}.get_clinical_notes(
   admission_id INT  COMMENT 'Hospital admission identifier (HADM_ID)',
   chart_date   DATE COMMENT 'Date of the clinical note (CHARTDATE)'
 )
@@ -121,7 +130,7 @@ RETURNS TABLE (
   CHARTDATE  DATE,
   CHARTTIME  TIMESTAMP
 )
-COMMENT 'Returns clinical notes for a specific patient admission on a given date. Use this when you need notes for a known HADM_ID and date. Use the Knowledge Assistant instead for semantic/topic-based retrieval.'
+COMMENT 'Returns clinical notes for a specific patient admission on a given date. Use when you need notes for a known HADM_ID and date. Use the Knowledge Assistant for semantic or topic-based retrieval instead.'
 RETURN
   SELECT
     SUBJECT_ID,
@@ -129,42 +138,40 @@ RETURN
     TEXT,
     CHARTDATE,
     CHARTTIME
-  FROM hls_amer_catalog.clinical_workshop.note_events_20000
-  WHERE HADM_ID    = admission_id
-    AND CHARTDATE  = chart_date;
+  FROM ${catalog}.${schema}.note_events_20000
+  WHERE HADM_ID   = admission_id
+    AND CHARTDATE = chart_date;
 
 -- Test it
--- SELECT * FROM hls_amer_catalog.clinical_workshop.get_clinical_notes(175562, '2143-01-18');
+-- SELECT * FROM ${catalog}.${schema}.get_clinical_notes(175562, '2143-01-18');
 
 
 -- -------------------------------------------------------------
 -- FUNCTION 5: clinical_notes_vector_search
 -- Semantic search over note embeddings via vector index
--- Used by: Knowledge Assistant as its retrieval backbone
--- IMPORTANT: Create the vector index FIRST (Module 2 in the UI)
---            then update the index name below
+-- PREREQUISITE: Complete Module 1 (Vector Search Index) first
+--               and set the vs_index widget to match your index name
 -- -------------------------------------------------------------
-CREATE OR REPLACE FUNCTION hls_amer_catalog.clinical_workshop.clinical_notes_vector_search(
+CREATE OR REPLACE FUNCTION ${catalog}.${schema}.clinical_notes_vector_search(
   query STRING COMMENT 'Natural language question or clinical topic to search for in notes'
 )
 RETURNS TABLE (
   page_content STRING,
   metadata     MAP<STRING, STRING>
 )
-COMMENT 'Performs semantic similarity search over MIMIC clinical notes. Returns the most relevant note text and metadata (doc_uri, HADM_ID). Use this when you need to find notes relevant to a clinical topic or question rather than a specific patient.'
+COMMENT 'Performs semantic similarity search over MIMIC clinical notes. Returns the most relevant note text and metadata (doc_uri, HADM_ID). Use when you need notes relevant to a clinical topic rather than a specific patient.'
 RETURN
   SELECT
-    TEXT        AS page_content,
+    TEXT     AS page_content,
     map(
       'doc_uri', ROW_ID,
       'HADM_ID', HADM_ID
-    )           AS metadata
+    )        AS metadata
   FROM vector_search(
-    -- UPDATE THIS to match your vector index name after creating it in the UI
-    index   => 'hls_amer_catalog.clinical_workshop.note_events_vs_index',
-    query   => query,
+    index       => '${catalog}.${schema}.${vs_index}',
+    query       => query,
     num_results => 5
   );
 
--- Test after vector index is created:
--- SELECT * FROM hls_amer_catalog.clinical_workshop.clinical_notes_vector_search('patient with respiratory failure on ventilator');
+-- Test after completing Module 1 (Vector Search Index):
+-- SELECT * FROM ${catalog}.${schema}.clinical_notes_vector_search('patient on ventilator with respiratory failure');

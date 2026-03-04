@@ -2,24 +2,32 @@
 # MAGIC %md
 # MAGIC # Workshop Setup: Clinical AI Assistant
 # MAGIC Run this notebook once before the workshop. It will:
-# MAGIC 1. Create the `hls_amer_catalog.clinical_workshop` schema
+# MAGIC 1. Create the schema and volumes in your chosen catalog
 # MAGIC 2. Load all Delta tables from Parquet
-# MAGIC 3. Upload clinical PDFs to a UC Volume
+# MAGIC 3. Confirm PDFs are in place
 # MAGIC
 # MAGIC **Estimated run time: ~5 minutes**
 
 # COMMAND ----------
-# MAGIC %md ## Configuration
+# MAGIC %md ## Step 1: Configure catalog and schema
+# MAGIC Set the values below, then run all cells.
 
 # COMMAND ----------
-CATALOG = "hls_amer_catalog"
-SCHEMA  = "clinical_workshop"
-# Path to the Parquet files — update if you stored them elsewhere
+dbutils.widgets.text("catalog", "hls_amer_catalog", "Catalog")
+dbutils.widgets.text("schema",  "clinical_workshop", "Schema")
+
+CATALOG = dbutils.widgets.get("catalog")
+SCHEMA  = dbutils.widgets.get("schema")
+
 PARQUET_BASE = f"/Volumes/{CATALOG}/{SCHEMA}/raw_data/parquet"
 PDF_VOLUME   = f"/Volumes/{CATALOG}/{SCHEMA}/clinical_pdfs"
 
+print(f"Target:  {CATALOG}.{SCHEMA}")
+print(f"Parquet: {PARQUET_BASE}")
+print(f"PDFs:    {PDF_VOLUME}")
+
 # COMMAND ----------
-# MAGIC %md ## Step 1: Create catalog, schema, and volumes
+# MAGIC %md ## Step 2: Create schema and volumes
 
 # COMMAND ----------
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {CATALOG}.{SCHEMA}")
@@ -29,15 +37,14 @@ spark.sql(f"""
   CREATE VOLUME IF NOT EXISTS {CATALOG}.{SCHEMA}.raw_data
   COMMENT 'Raw Parquet data files for workshop setup'
 """)
-
 spark.sql(f"""
   CREATE VOLUME IF NOT EXISTS {CATALOG}.{SCHEMA}.clinical_pdfs
-  COMMENT 'Clinical note PDFs for the KIE (extraction) module'
+  COMMENT 'Clinical note PDFs for the KIE extraction module'
 """)
-print("Volumes created")
+print("Volumes ready")
 
 # COMMAND ----------
-# MAGIC %md ## Step 2: Load Delta tables from Parquet
+# MAGIC %md ## Step 3: Load Delta tables from Parquet
 
 # COMMAND ----------
 TABLES = [
@@ -60,37 +67,44 @@ for tbl in TABLES:
 print("\nAll tables loaded!")
 
 # COMMAND ----------
-# MAGIC %md ## Step 3: Verify table row counts
+# MAGIC %md ## Step 4: Verify row counts
 
 # COMMAND ----------
-# MAGIC %sql
-# MAGIC SELECT 'note_events_20000' as table_name, count(*) as rows FROM hls_amer_catalog.clinical_workshop.note_events_20000
-# MAGIC UNION ALL SELECT 'admissions',     count(*) FROM hls_amer_catalog.clinical_workshop.admissions
-# MAGIC UNION ALL SELECT 'patients',        count(*) FROM hls_amer_catalog.clinical_workshop.patients
-# MAGIC UNION ALL SELECT 'lab_events',      count(*) FROM hls_amer_catalog.clinical_workshop.lab_events
-# MAGIC UNION ALL SELECT 'd_labitems',      count(*) FROM hls_amer_catalog.clinical_workshop.d_labitems
-# MAGIC UNION ALL SELECT 'diagnoses_icd',   count(*) FROM hls_amer_catalog.clinical_workshop.diagnoses_icd
-# MAGIC UNION ALL SELECT 'd_icd_diagnoses', count(*) FROM hls_amer_catalog.clinical_workshop.d_icd_diagnoses
+counts = spark.sql(f"""
+  SELECT 'note_events_20000' AS table_name, count(*) AS rows FROM {CATALOG}.{SCHEMA}.note_events_20000
+  UNION ALL SELECT 'admissions',      count(*) FROM {CATALOG}.{SCHEMA}.admissions
+  UNION ALL SELECT 'patients',        count(*) FROM {CATALOG}.{SCHEMA}.patients
+  UNION ALL SELECT 'lab_events',      count(*) FROM {CATALOG}.{SCHEMA}.lab_events
+  UNION ALL SELECT 'd_labitems',      count(*) FROM {CATALOG}.{SCHEMA}.d_labitems
+  UNION ALL SELECT 'diagnoses_icd',   count(*) FROM {CATALOG}.{SCHEMA}.diagnoses_icd
+  UNION ALL SELECT 'd_icd_diagnoses', count(*) FROM {CATALOG}.{SCHEMA}.d_icd_diagnoses
+""")
+display(counts)
 
 # COMMAND ----------
-# MAGIC %md ## Step 4: Confirm PDFs uploaded to Volume
-# MAGIC Upload the PDFs from the workshop repo to the clinical_pdfs volume before running this cell.
-# MAGIC You can drag-and-drop in the Catalog Explorer UI under:
-# MAGIC `hls_amer_catalog > clinical_workshop > clinical_pdfs`
+# MAGIC %md ## Step 5: Confirm PDFs in volume
+# MAGIC
+# MAGIC Upload the PDFs from the workshop repo (`pdfs/` folder) to the `clinical_pdfs` volume.
+# MAGIC You can drag-and-drop in Catalog Explorer:
+# MAGIC `<catalog> > <schema> > clinical_pdfs`
 
 # COMMAND ----------
-import os
-pdf_files = dbutils.fs.ls(PDF_VOLUME)
-print(f"PDFs in volume: {len(pdf_files)}")
-for f in pdf_files[:5]:
-    print(f"  {f.name} ({f.size/1024:.1f} KB)")
+try:
+    pdf_files = dbutils.fs.ls(PDF_VOLUME)
+    print(f"PDFs found in volume: {len(pdf_files)}")
+    for f in pdf_files[:5]:
+        print(f"  {f.name} ({f.size/1024:.1f} KB)")
+    if len(pdf_files) < 30:
+        print(f"\nWARNING: Expected 30 PDFs, found {len(pdf_files)}. Upload remaining files before Module 3 (KIE).")
+except Exception as e:
+    print(f"No PDFs found yet at {PDF_VOLUME}. Upload the pdfs/ folder before Module 3 (KIE).")
 
 # COMMAND ----------
 # MAGIC %md
 # MAGIC ## Setup Complete!
 # MAGIC
-# MAGIC Next steps:
-# MAGIC - **Module 1 (KIE)**: Go to Catalog Explorer, open `clinical_pdfs` volume, explore PDFs
-# MAGIC - **Module 2 (Knowledge Base)**: Create vector index on `note_events_20000`
-# MAGIC - **Module 3 (UC Functions)**: Run `01_create_functions.sql`
-# MAGIC - **Module 4 (Supervisor Agent)**: Use the Agents UI
+# MAGIC **Workshop module order:**
+# MAGIC 1. **Module 1 (Vector Search Index)** — Create a VS index on `note_events_20000` in Catalog Explorer
+# MAGIC 2. **Module 2 (Knowledge Assistant)** — Build a KA agent using the VS index in Mosaic AI > Agents
+# MAGIC 3. **Module 3 (KIE)** — Run `ai_extract()` on the PDFs in `clinical_pdfs` volume
+# MAGIC 4. **Module 4 (Supervisor Agent)** — Run `01_create_functions.sql`, create a Genie room, then wire everything into a Supervisor Agent
