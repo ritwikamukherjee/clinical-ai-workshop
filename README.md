@@ -43,28 +43,48 @@ clinical_workshop/
 
 ## Step 0 — Deploy Data (Instructor, Pre-workshop)
 
-### Option A: CLI
+### Option A: CLI (fully automated)
+
 ```bash
-# Authenticate to your workspace
+# 1. Clone the repo
+git clone https://github.com/ritwikamukherjee/clinical-ai-workshop
+cd clinical-ai-workshop
+
+# 2. Authenticate (opens browser for SSO)
 databricks auth login https://<your-workspace>.cloud.databricks.com --profile=workshop
 
-# Upload data and PDFs to UC Volumes (volumes are created by the setup notebook)
+# 3. Create schema (catalog must already exist)
+databricks --profile=workshop schemas create <schema> <catalog>
+
+# 4. Create volumes
+databricks --profile=workshop volumes create <catalog> <schema> raw_data MANAGED
+databricks --profile=workshop volumes create <catalog> <schema> clinical_pdfs MANAGED
+
+# 5. Upload Parquet files
 databricks --profile=workshop fs cp -r parquet/ \
   dbfs:/Volumes/<catalog>/<schema>/raw_data/parquet/
 
+# 6. Upload PDFs
 databricks --profile=workshop fs cp -r pdfs/ \
   dbfs:/Volumes/<catalog>/<schema>/clinical_pdfs/
+
+# 7. Import the setup notebook into the workspace
+databricks --profile=workshop workspace import \
+  /Shared/clinical_workshop/00_setup \
+  --file notebooks/00_setup.py \
+  --format SOURCE --language PYTHON --overwrite
 ```
 
-### Option B: Workspace UI
-1. Catalog Explorer → create schema `<catalog>.<schema>`
-2. Create two volumes: `raw_data` and `clinical_pdfs`
-3. Drag-and-drop the `parquet/` folder into `raw_data`
-4. Drag-and-drop all PDFs into `clinical_pdfs`
+Then open `/Shared/clinical_workshop/00_setup` in the workspace, set the **catalog** and **schema** widgets, and **Run All** to load the Delta tables (~5 min).
 
-### Run the setup notebook
-Import `notebooks/00_setup.py` into your workspace.
-Set the **catalog** and **schema** widgets at the top, then **Run All** (~5 min).
+### Option B: Workspace UI
+1. `git clone https://github.com/ritwikamukherjee/clinical-ai-workshop` locally
+2. Catalog Explorer → create schema `<catalog>.<schema>`
+3. Create two volumes: `raw_data` and `clinical_pdfs`
+4. Drag-and-drop the `parquet/` folder into `raw_data/parquet/`
+5. Drag-and-drop all PDFs into `clinical_pdfs/`
+6. Import `notebooks/00_setup.py` via **Workspace → Import**
+7. Set widgets, **Run All**
 
 ---
 
