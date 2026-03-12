@@ -109,3 +109,4 @@ except Exception as e:
 # MAGIC 3. **Module 3 (KIE)** — Run `ai_extract()` on the PDFs in `clinical_pdfs` volume
 # MAGIC 4. **Module 4 (UC Functions)** — Run `01_create_functions.sql` to register the tool functions
 # MAGIC 5. **Module 5 (Supervisor Agent)** — Create a Genie room, then wire KA + Genie + UC functions into a Supervisor Agent
+# MAGIC 6. **Module 6 (Evaluation)** *(Optional)* — Use MLflow Correctness and Completeness scorers to evaluate agent responses

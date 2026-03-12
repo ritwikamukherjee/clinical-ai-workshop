@@ -359,6 +359,150 @@ SELECT * FROM <catalog>.<schema>.clinical_notes_vector_search('patient on ventil
 
 ---
 
+## Module 6 — Evaluate with MLflow Scorers (Optional, ~20 min)
+
+**Goal:** Use MLflow's built-in `Correctness` and `Completeness` scorers to evaluate the Supervisor Agent's responses against clinical ground truth.
+
+### Overview
+
+MLflow provides LLM-as-judge scorers that can be attached to your agent's evaluation:
+
+| Scorer | What it measures | Ground truth format |
+|---|---|---|
+| **Correctness** | Are the facts in the response accurate? | `expected_facts` — a list of factual statements that should appear in the response |
+| **Completeness** | Does the response address all parts of the question? | No ground truth needed — judges against the original query |
+
+### Step 6.1 — Create an evaluation dataset
+
+Build an eval dataset with clinical questions and expected facts derived from the actual data. Use `expected_facts` (not `expected_response`) — this gives the judge flexibility since the agent's wording will vary.
+
+```python
+eval_dataset = [
+    # --- Patient-specific: admission lookup ---
+    {
+        "inputs": {"query": "What was patient 22's most recent admission?"},
+        "expectations": {
+            "expected_facts": [
+                "Patient 22 (SUBJECT_ID=22) has an admission record",
+                "The response includes HADM_ID",
+                "The response includes admission and discharge dates",
+                "The admission type is specified (e.g., EMERGENCY, ELECTIVE)",
+            ]
+        },
+    },
+    # --- Patient-specific: abnormal labs ---
+    {
+        "inputs": {"query": "Did patient 22 have any abnormal labs during admission 135236?"},
+        "expectations": {
+            "expected_facts": [
+                "The response identifies abnormal lab results for HADM_ID 135236",
+                "Lab items are resolved to human-readable names (not just ITEMIDs)",
+                "Units of measure are included for lab values",
+            ]
+        },
+    },
+    # --- Clinical notes retrieval ---
+    {
+        "inputs": {"query": "What do the clinical notes say about respiratory failure in ICU patients?"},
+        "expectations": {
+            "expected_facts": [
+                "The response references specific clinical notes (ROW_IDs or HADM_IDs cited)",
+                "Mentions respiratory-related findings from the notes (e.g., ventilator, intubation, O2 saturation)",
+                "Does not fabricate diagnoses not present in the retrieved notes",
+            ]
+        },
+    },
+    # --- Population-level via Genie ---
+    {
+        "inputs": {"query": "How many patients were admitted as emergencies?"},
+        "expectations": {
+            "expected_facts": [
+                "The response includes a specific count of emergency admissions",
+                "The count is derived from the admissions table where ADMISSION_TYPE = 'EMERGENCY'",
+            ]
+        },
+    },
+    # --- Multi-step clinical reasoning ---
+    {
+        "inputs": {"query": "For patient 22, get their latest admission, check for abnormal labs, and summarize the clinical picture."},
+        "expectations": {
+            "expected_facts": [
+                "The response includes the most recent admission details (HADM_ID, dates, diagnosis)",
+                "Abnormal lab results are listed with resolved lab names",
+                "A clinical summary ties the admission diagnosis to the lab findings",
+                "Source metadata (HADM_ID, chart dates) is cited",
+            ]
+        },
+    },
+]
+```
+
+### Step 6.2 — Run Correctness evaluation
+
+```python
+from mlflow.genai.scorers import Correctness
+import mlflow
+
+# Point to your deployed Supervisor Agent endpoint
+predict_fn = mlflow.genai.to_predict_fn(
+    "serving_endpoint",
+    endpoint_name="<your-supervisor-agent-endpoint>",
+)
+
+correctness_results = mlflow.genai.evaluate(
+    data=eval_dataset,
+    predict_fn=predict_fn,
+    scorers=[Correctness()],
+)
+
+# View results — each row shows yes/no + rationale
+correctness_results.tables["eval_results"]
+```
+
+Each result includes:
+- **`value`**: `"yes"` or `"no"` — did the response contain the expected facts?
+- **`rationale`**: the judge's explanation of why it scored that way
+
+### Step 6.3 — Run Completeness evaluation
+
+Completeness checks whether the agent addressed **all parts** of the user's question. It does not require `expected_facts` — it judges against the original query.
+
+```python
+from mlflow.genai.scorers import Correctness, Completeness
+import mlflow
+
+# Run both scorers together
+results = mlflow.genai.evaluate(
+    data=eval_dataset,
+    predict_fn=predict_fn,
+    scorers=[
+        Correctness(),
+        Completeness(),
+    ],
+)
+
+results.tables["eval_results"]
+```
+
+Completeness is especially useful for **multi-part clinical questions** like:
+> *"For patient 22, get their latest admission, check for abnormal labs, and summarize the clinical picture."*
+
+The Completeness scorer will check that the agent addressed all three parts (admission lookup, lab check, and summary) rather than only answering one.
+
+### Step 6.4 — Interpret results
+
+| Question type | Correctness catches | Completeness catches |
+|---|---|---|
+| Patient admission lookup | Wrong HADM_ID, fabricated dates | Missing admission type or diagnosis |
+| Abnormal labs | Wrong lab values, unresolved ITEMIDs | Returned labs but forgot to resolve names |
+| Clinical notes retrieval | Hallucinated diagnoses not in notes | Retrieved notes but didn't cite ROW_IDs |
+| Population query (Genie) | Wrong count or misattributed filter | Gave count but didn't specify the filter used |
+| Multi-step reasoning | Any factual error in the chain | Answered one sub-question but skipped others |
+
+> **Tip:** Start with 5-10 eval examples covering your key question types. Expand the dataset as you identify failure modes. Use `expected_facts` as short, verifiable statements — not full expected responses.
+
+---
+
 ## Data Dictionary
 
 ### note_events_20000
