@@ -124,13 +124,16 @@ Mosaic AI → Vector Search → select `note_events_vs_index` → confirm **Stat
 1. Mosaic AI → **Agents** → **New Agent**
 2. Select type: **Knowledge Assistant**
 3. Attach vector index: `note_events_vs_index`
-4. Set system prompt:
+4. When prompted for column mappings:
+   - **Doc URI Column**: `ROW_ID` — unique note identifier, included in citations
+   - **Text Column**: `TEXT` — full clinical note text, used for semantic search
+5. Set system prompt:
    ```
    This agent retrieves relevant MIMIC-III clinical notes to answer questions
    about patient admissions, diagnoses, events, and outcomes. Questions may be
    about specific cases or population patterns. Be concise.
    ```
-5. **Save** the agent — you'll add it as a tool in Module 4
+6. **Save** the agent — you'll add it as a tool in Module 5 (Supervisor Agent)
 
 ### Step 2.2 — Test the Knowledge Assistant
 Try these questions directly in the agent playground:
@@ -189,20 +192,20 @@ Explore the results: `SELECT SUBJECT_ID, extracted.diagnosis, extracted.patient_
 
 ---
 
-## Module 4 — Supervisor Agent (~45 min)
+## Module 4 — UC Functions (~10 min)
 
-**Goal:** Wire the Knowledge Assistant, UC functions, and Genie into a single orchestrating agent.
+**Goal:** Register the UC tool functions used by the Supervisor Agent.
 
-### Step 4.1 — Create the UC Functions (Agent Bricks)
+Open `notebooks/01_create_functions.sql` in the SQL Editor.
 
-Open `notebooks/01_create_functions.sql` in a SQL notebook.
+Update the three `DECLARE` values at the top to match your environment:
+```sql
+DECLARE OR REPLACE catalog_name  = 'hls_amer_catalog';
+DECLARE OR REPLACE schema_name   = 'clinical_workshop';
+DECLARE OR REPLACE vs_index_name = 'note_events_vs_index';
+```
 
-Set the widgets:
-- **catalog**: your catalog name
-- **schema**: your schema name
-- **vs_index**: `note_events_vs_index` (or your index name from Module 1)
-
-Run each block. This creates 5 functions:
+Run all statements in order. A pre-flight check will verify the Vector Search index exists (Module 1). This creates 5 functions:
 
 | Function | Input | What it does |
 |---|---|---|
@@ -232,7 +235,13 @@ SELECT * FROM <catalog>.<schema>.clinical_notes_vector_search('patient on ventil
 
 ---
 
-### Step 4.2 — Create the Genie Room (Managed MCP)
+---
+
+## Module 5 — Supervisor Agent (~35 min)
+
+**Goal:** Wire the Knowledge Assistant, UC functions, and Genie into a single orchestrating agent.
+
+### Step 5.1 — Create the Genie Room (Managed MCP)
 
 1. **Genie** → **New Genie Room**
 2. Add tables:
@@ -252,7 +261,7 @@ SELECT * FROM <catalog>.<schema>.clinical_notes_vector_search('patient on ventil
 
 ---
 
-### Step 4.3 — Build the Supervisor Agent
+### Step 5.2 — Build the Supervisor Agent
 
 1. Mosaic AI → **Agents** → **New Agent**
 2. Select type: **Custom Agent** (or Supervisor)
@@ -347,7 +356,7 @@ SELECT * FROM <catalog>.<schema>.clinical_notes_vector_search('patient on ventil
 ## Notes for Instructors
 
 - **Pre-create** the vector index (Module 1) before the session — it takes 5-10 min to sync
-- The `clinical_notes_vector_search` function requires the vector index to exist first — set the `vs_index` widget in `01_create_functions.sql` to match your index name
+- The `clinical_notes_vector_search` function requires the vector index to exist first — set the `vs_index_name` variable in `01_create_functions.sql` to match your index name
 - All data is synthetic and de-identified — safe for any customer-facing session
 - Parquet files: ~23 MB total | PDFs: ~84 KB total
 
