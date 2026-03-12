@@ -12,6 +12,12 @@ DECLARE OR REPLACE catalog_name  = 'hls_amer_catalog';
 DECLARE OR REPLACE schema_name   = 'clinical_workshop';
 DECLARE OR REPLACE vs_index_name = 'note_events_vs_index';
 
+-- Helper: single-quote character for building dynamic SQL
+DECLARE OR REPLACE q = CHR(39);
+
+-- Fully qualified prefix for convenience
+DECLARE OR REPLACE fqn = catalog_name || '.' || schema_name;
+
 -- Apply context
 EXECUTE IMMEDIATE 'USE CATALOG ' || catalog_name;
 EXECUTE IMMEDIATE 'USE SCHEMA '  || schema_name;
@@ -23,12 +29,12 @@ EXECUTE IMMEDIATE 'USE SCHEMA '  || schema_name;
 -- complete Module 1 before running this notebook.
 -- -------------------------------------------------------------
 EXECUTE IMMEDIATE
-'SELECT assert_true(
-  (SELECT count(*) FROM ' || catalog_name || '.information_schema.tables
-   WHERE table_schema = \'' || schema_name  || '\'
-     AND table_name   = \'' || vs_index_name || '\') > 0,
-  \'Vector Search index (' || catalog_name || '.' || schema_name || '.' || vs_index_name || ') not found. '
-  || \'Please complete Module 1 (Vector Search Index) before running this notebook.\')';
+  'SELECT assert_true('
+  || '(SELECT count(*) FROM ' || catalog_name || '.information_schema.tables'
+  || ' WHERE table_schema = ' || q || schema_name  || q
+  || '   AND table_name   = ' || q || vs_index_name || q || ') > 0,'
+  || q || 'Vector Search index (' || fqn || '.' || vs_index_name || ') not found. '
+  || 'Please complete Module 1 (Vector Search Index) before running this notebook.' || q || ')';
 
 
 -- -------------------------------------------------------------
@@ -37,36 +43,29 @@ EXECUTE IMMEDIATE
 -- Used by: Supervisor Agent to anchor clinical timelines
 -- -------------------------------------------------------------
 EXECUTE IMMEDIATE
-'CREATE OR REPLACE FUNCTION ' || catalog_name || '.' || schema_name || '.get_latest_admission(
-  patient_id INT COMMENT \'Unique patient identifier (SUBJECT_ID)\'
-)
-RETURNS TABLE (
-  SUBJECT_ID     INT,
-  HADM_ID        INT,
-  ADMITTIME      DATE,
-  DISCHTIME      DATE,
-  ADMISSION_TYPE STRING,
-  INSURANCE      STRING,
-  DIAGNOSIS      STRING
-)
-COMMENT \'Returns the most recent admission record for a given patient. Use this to anchor clinical timelines before querying labs or notes.\'
-RETURN
-  SELECT
-    SUBJECT_ID,
-    HADM_ID,
-    ADMITTIME,
-    DISCHTIME,
-    ADMISSION_TYPE,
-    INSURANCE,
-    DIAGNOSIS
-  FROM ' || catalog_name || '.' || schema_name || '.admissions
-  WHERE SUBJECT_ID = patient_id
-  ORDER BY ADMITTIME DESC
-  LIMIT 1';
+  'CREATE OR REPLACE FUNCTION ' || fqn || '.get_latest_admission('
+  || '  patient_id INT COMMENT ' || q || 'Unique patient identifier (SUBJECT_ID)' || q
+  || ') '
+  || 'RETURNS TABLE ('
+  || '  SUBJECT_ID     INT,'
+  || '  HADM_ID        INT,'
+  || '  ADMITTIME      DATE,'
+  || '  DISCHTIME      DATE,'
+  || '  ADMISSION_TYPE STRING,'
+  || '  INSURANCE      STRING,'
+  || '  DIAGNOSIS      STRING'
+  || ') '
+  || 'COMMENT ' || q || 'Returns the most recent admission record for a given patient. Use this to anchor clinical timelines before querying labs or notes.' || q || ' '
+  || 'RETURN'
+  || '  SELECT SUBJECT_ID, HADM_ID, ADMITTIME, DISCHTIME, ADMISSION_TYPE, INSURANCE, DIAGNOSIS'
+  || '  FROM ' || fqn || '.admissions'
+  || '  WHERE SUBJECT_ID = patient_id'
+  || '  ORDER BY ADMITTIME DESC'
+  || '  LIMIT 1';
 
 -- Test it
 EXECUTE IMMEDIATE
-'SELECT * FROM ' || catalog_name || '.' || schema_name || '.get_latest_admission(22)';
+  'SELECT * FROM ' || fqn || '.get_latest_admission(22)';
 
 
 -- -------------------------------------------------------------
@@ -75,34 +74,27 @@ EXECUTE IMMEDIATE
 -- Used by: Supervisor Agent when asked about lab findings
 -- -------------------------------------------------------------
 EXECUTE IMMEDIATE
-'CREATE OR REPLACE FUNCTION ' || catalog_name || '.' || schema_name || '.get_abnormal_labs(
-  admission_id INT COMMENT \'Hospital admission identifier (HADM_ID)\'
-)
-RETURNS TABLE (
-  SUBJECT_ID INT,
-  HADM_ID    INT,
-  ITEMID     INT,
-  CHARTTIME  TIMESTAMP,
-  VALUE      STRING,
-  VALUEUOM   STRING,
-  FLAG       STRING
-)
-COMMENT \'Returns abnormal lab results for a specific hospital admission. Returns subject ID, admission ID, lab item ID, chart time, value, unit, and abnormal flag.\'
-RETURN
-  SELECT
-    SUBJECT_ID,
-    HADM_ID,
-    ITEMID,
-    CHARTTIME,
-    VALUE,
-    VALUEUOM,
-    FLAG
-  FROM ' || catalog_name || '.' || schema_name || '.lab_events
-  WHERE HADM_ID = admission_id
-    AND FLAG = \'abnormal\'';
+  'CREATE OR REPLACE FUNCTION ' || fqn || '.get_abnormal_labs('
+  || '  admission_id INT COMMENT ' || q || 'Hospital admission identifier (HADM_ID)' || q
+  || ') '
+  || 'RETURNS TABLE ('
+  || '  SUBJECT_ID INT,'
+  || '  HADM_ID    INT,'
+  || '  ITEMID     INT,'
+  || '  CHARTTIME  TIMESTAMP,'
+  || '  VALUE      STRING,'
+  || '  VALUEUOM   STRING,'
+  || '  FLAG       STRING'
+  || ') '
+  || 'COMMENT ' || q || 'Returns abnormal lab results for a specific hospital admission. Returns subject ID, admission ID, lab item ID, chart time, value, unit, and abnormal flag.' || q || ' '
+  || 'RETURN'
+  || '  SELECT SUBJECT_ID, HADM_ID, ITEMID, CHARTTIME, VALUE, VALUEUOM, FLAG'
+  || '  FROM ' || fqn || '.lab_events'
+  || '  WHERE HADM_ID = admission_id'
+  || '    AND FLAG = ' || q || 'abnormal' || q;
 
 -- Test it (replace with a real HADM_ID from your admissions table)
--- EXECUTE IMMEDIATE 'SELECT * FROM ' || catalog_name || '.' || schema_name || '.get_abnormal_labs(135236) LIMIT 10';
+-- EXECUTE IMMEDIATE 'SELECT * FROM ' || fqn || '.get_abnormal_labs(135236) LIMIT 10';
 
 
 -- -------------------------------------------------------------
@@ -111,25 +103,25 @@ RETURN
 -- Used by: Supervisor Agent to interpret lab result IDs
 -- -------------------------------------------------------------
 EXECUTE IMMEDIATE
-'CREATE OR REPLACE FUNCTION ' || catalog_name || '.' || schema_name || '.get_lab_type(
-  abnormal_lab_item_id INT COMMENT \'Lab item identifier (ITEMID) from lab_events\'
-)
-RETURNS TABLE (
-  ROW_ID     INT,
-  ITEMID     INT,
-  LABEL      STRING,
-  FLUID      STRING,
-  CATEGORY   STRING,
-  LOINC_CODE STRING
-)
-COMMENT \'Resolves a lab item ID to its label, fluid type, category, and LOINC code. Use after get_abnormal_labs to understand what each lab item represents. Example: ITEMID=51279 -> Red Blood Cells, Blood, Hematology\'
-RETURN
-  SELECT *
-  FROM ' || catalog_name || '.' || schema_name || '.d_labitems
-  WHERE ITEMID = abnormal_lab_item_id';
+  'CREATE OR REPLACE FUNCTION ' || fqn || '.get_lab_type('
+  || '  abnormal_lab_item_id INT COMMENT ' || q || 'Lab item identifier (ITEMID) from lab_events' || q
+  || ') '
+  || 'RETURNS TABLE ('
+  || '  ROW_ID     INT,'
+  || '  ITEMID     INT,'
+  || '  LABEL      STRING,'
+  || '  FLUID      STRING,'
+  || '  CATEGORY   STRING,'
+  || '  LOINC_CODE STRING'
+  || ') '
+  || 'COMMENT ' || q || 'Resolves a lab item ID to its label, fluid type, category, and LOINC code. Use after get_abnormal_labs to understand what each lab item represents. Example: ITEMID=51279 -> Red Blood Cells, Blood, Hematology' || q || ' '
+  || 'RETURN'
+  || '  SELECT *'
+  || '  FROM ' || fqn || '.d_labitems'
+  || '  WHERE ITEMID = abnormal_lab_item_id';
 
 -- Test it
--- EXECUTE IMMEDIATE 'SELECT * FROM ' || catalog_name || '.' || schema_name || '.get_lab_type(51279)';
+-- EXECUTE IMMEDIATE 'SELECT * FROM ' || fqn || '.get_lab_type(51279)';
 
 
 -- -------------------------------------------------------------
@@ -139,31 +131,26 @@ RETURN
 -- NOTE: Use the Knowledge Assistant for semantic/topic queries
 -- -------------------------------------------------------------
 EXECUTE IMMEDIATE
-'CREATE OR REPLACE FUNCTION ' || catalog_name || '.' || schema_name || '.get_clinical_notes(
-  admission_id INT  COMMENT \'Hospital admission identifier (HADM_ID)\',
-  chart_date   DATE COMMENT \'Date of the clinical note (CHARTDATE)\'
-)
-RETURNS TABLE (
-  SUBJECT_ID INT,
-  HADM_ID    INT,
-  TEXT       STRING,
-  CHARTDATE  DATE,
-  CHARTTIME  TIMESTAMP
-)
-COMMENT \'Returns clinical notes for a specific patient admission on a given date. Use when you need notes for a known HADM_ID and date. Use the Knowledge Assistant for semantic or topic-based retrieval instead.\'
-RETURN
-  SELECT
-    SUBJECT_ID,
-    HADM_ID,
-    TEXT,
-    CHARTDATE,
-    CHARTTIME
-  FROM ' || catalog_name || '.' || schema_name || '.note_events_20000
-  WHERE HADM_ID   = admission_id
-    AND CHARTDATE = chart_date';
+  'CREATE OR REPLACE FUNCTION ' || fqn || '.get_clinical_notes('
+  || '  admission_id INT  COMMENT ' || q || 'Hospital admission identifier (HADM_ID)' || q || ','
+  || '  chart_date   DATE COMMENT ' || q || 'Date of the clinical note (CHARTDATE)' || q
+  || ') '
+  || 'RETURNS TABLE ('
+  || '  SUBJECT_ID INT,'
+  || '  HADM_ID    INT,'
+  || '  TEXT       STRING,'
+  || '  CHARTDATE  DATE,'
+  || '  CHARTTIME  TIMESTAMP'
+  || ') '
+  || 'COMMENT ' || q || 'Returns clinical notes for a specific patient admission on a given date. Use when you need notes for a known HADM_ID and date. Use the Knowledge Assistant for semantic or topic-based retrieval instead.' || q || ' '
+  || 'RETURN'
+  || '  SELECT SUBJECT_ID, HADM_ID, TEXT, CHARTDATE, CHARTTIME'
+  || '  FROM ' || fqn || '.note_events_20000'
+  || '  WHERE HADM_ID   = admission_id'
+  || '    AND CHARTDATE = chart_date';
 
 -- Test it
--- EXECUTE IMMEDIATE 'SELECT * FROM ' || catalog_name || '.' || schema_name || '.get_clinical_notes(175562, \'2143-01-18\')';
+-- EXECUTE IMMEDIATE 'SELECT * FROM ' || fqn || '.get_clinical_notes(175562, ' || q || '2143-01-18' || q || ')';
 
 
 -- -------------------------------------------------------------
@@ -172,26 +159,23 @@ RETURN
 -- PREREQUISITE: Complete Module 1 (Vector Search Index) first
 -- -------------------------------------------------------------
 EXECUTE IMMEDIATE
-'CREATE OR REPLACE FUNCTION ' || catalog_name || '.' || schema_name || '.clinical_notes_vector_search(
-  query STRING COMMENT \'Natural language question or clinical topic to search for in notes\'
-)
-RETURNS TABLE (
-  page_content STRING,
-  metadata     MAP<STRING, STRING>
-)
-COMMENT \'Performs semantic similarity search over MIMIC clinical notes. Returns the most relevant note text and metadata (doc_uri, HADM_ID). Use when you need notes relevant to a clinical topic rather than a specific patient.\'
-RETURN
-  SELECT
-    TEXT     AS page_content,
-    map(
-      \'doc_uri\', ROW_ID,
-      \'HADM_ID\', HADM_ID
-    )        AS metadata
-  FROM vector_search(
-    index       => \'' || catalog_name || '.' || schema_name || '.' || vs_index_name || '\',
-    query       => query,
-    num_results => 5
-  )';
+  'CREATE OR REPLACE FUNCTION ' || fqn || '.clinical_notes_vector_search('
+  || '  query STRING COMMENT ' || q || 'Natural language question or clinical topic to search for in notes' || q
+  || ') '
+  || 'RETURNS TABLE ('
+  || '  page_content STRING,'
+  || '  metadata     MAP<STRING, STRING>'
+  || ') '
+  || 'COMMENT ' || q || 'Performs semantic similarity search over MIMIC clinical notes. Returns the most relevant note text and metadata (doc_uri, HADM_ID). Use when you need notes relevant to a clinical topic rather than a specific patient.' || q || ' '
+  || 'RETURN'
+  || '  SELECT'
+  || '    TEXT AS page_content,'
+  || '    map(' || q || 'doc_uri' || q || ', ROW_ID, ' || q || 'HADM_ID' || q || ', HADM_ID) AS metadata'
+  || '  FROM vector_search('
+  || '    index       => ' || q || fqn || '.' || vs_index_name || q || ','
+  || '    query       => query,'
+  || '    num_results => 5'
+  || '  )';
 
 -- Test after completing Module 1 (Vector Search Index):
--- EXECUTE IMMEDIATE 'SELECT * FROM ' || catalog_name || '.' || schema_name || '.clinical_notes_vector_search(\'patient on ventilator with respiratory failure\')';
+-- EXECUTE IMMEDIATE 'SELECT * FROM ' || fqn || '.clinical_notes_vector_search(' || q || 'patient on ventilator with respiratory failure' || q || ')';
