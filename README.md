@@ -125,8 +125,8 @@ Mosaic AI → Vector Search → select `note_events_vs_index` → confirm **Stat
 2. Select type: **Knowledge Assistant**
 3. Attach vector index: `note_events_vs_index`
 4. When prompted for column mappings:
-   - **Doc URI Column**: `ROW_ID` — unique note identifier, included in citations
-   - **Text Column**: `TEXT` — full clinical note text, used for semantic search
+   - **Doc URI Column**: `ROW_ID` — unique note identifier, used as the citation reference so the agent can tell you which note it retrieved from
+   - **Text Column**: `TEXT` — the raw clinical note text, used for semantic retrieval
 5. Set system prompt:
    ```
    This agent retrieves relevant MIMIC-III clinical notes to answer questions
