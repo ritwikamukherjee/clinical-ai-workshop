@@ -127,19 +127,64 @@ Mosaic AI → Vector Search → select `note_events_vs_index` → confirm **Stat
 4. When prompted for column mappings:
    - **Doc URI Column**: `ROW_ID` — unique note identifier, used as the citation reference so the agent can tell you which note it retrieved from
    - **Text Column**: `TEXT` — the raw clinical note text, used for semantic retrieval
-5. Set system prompt:
+5. Set the **knowledge source description** (helps the KA understand what it's searching over):
    ```
-   This agent retrieves relevant MIMIC-III clinical notes to answer questions
-   about patient admissions, diagnoses, events, and outcomes. Questions may be
-   about specific cases or population patterns. Be concise.
+   20,000 de-identified ICU clinical notes from the MIMIC-III dataset covering
+   nursing assessments, physician progress notes, discharge summaries, and
+   procedure reports across 1,590 hospital admissions. Notes contain free-text
+   narratives including vital signs, medications, diagnoses, and care plans.
    ```
-6. **Save** the agent — you'll add it as a tool in Module 5 (Supervisor Agent)
+6. Set the **Instructions** (system prompt):
+   ```
+   You are a clinical notes retrieval assistant. You search a corpus of ICU
+   clinical notes to answer questions about patient care, diagnoses,
+   treatments, and outcomes.
+
+   Guidelines:
+   - Always cite the ROW_ID of the note(s) you retrieved so the user can
+     trace back to the source.
+   - If multiple notes are relevant, summarize across them and list each
+     ROW_ID.
+   - Do not infer diagnoses or lab values that are not explicitly stated
+     in the retrieved notes. If the notes are ambiguous or incomplete,
+     say so.
+   - For population-level questions (e.g., "what are common causes of X"),
+     synthesize patterns across retrieved notes rather than citing a
+     single case.
+   - Be concise. Use clinical terminology appropriate for a healthcare
+     professional audience.
+   ```
+7. **Save** the agent — you'll add it as a tool in Module 5 (Supervisor Agent)
 
 ### Step 2.2 — Test the Knowledge Assistant
-Try these questions directly in the agent playground:
-- `What are common diagnoses for patients with abdominal pain?`
-- `What are common causes of low oxygen saturation in ICU patients?`
-- `What diagnoses are most associated with repeated respiratory interventions?`
+Try these questions in the agent playground. Expected behavior is shown below each question.
+
+**Example 1 — Topic-based retrieval:**
+```
+Q: What are common causes of low oxygen saturation in ICU patients?
+
+Expected: The KA retrieves several notes mentioning desaturation events
+and synthesizes common causes (e.g., pneumonia, ARDS, pulmonary embolism,
+fluid overload). Each cause is backed by one or more ROW_ID citations.
+```
+
+**Example 2 — Specific clinical scenario:**
+```
+Q: What complications are documented after vascular surgery procedures?
+
+Expected: The KA pulls notes from post-operative vascular cases and
+summarizes documented complications (e.g., bleeding, infection, graft
+occlusion), citing the relevant ROW_IDs.
+```
+
+**Example 3 — Care pattern question:**
+```
+Q: What diagnoses are most associated with repeated respiratory interventions?
+
+Expected: The KA identifies notes where patients required multiple
+intubations, ventilator adjustments, or respiratory therapy, and lists
+the associated diagnoses with citations.
+```
 
 ---
 
