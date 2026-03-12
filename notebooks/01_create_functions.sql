@@ -24,7 +24,7 @@ EXECUTE IMMEDIATE 'USE SCHEMA '  || schema_name;
 -- -------------------------------------------------------------
 EXECUTE IMMEDIATE
 'CREATE OR REPLACE FUNCTION ' || catalog_name || '.' || schema_name || '.get_latest_admission(
-  patient_id INT COMMENT ''Unique patient identifier (SUBJECT_ID)''
+  patient_id INT COMMENT \'Unique patient identifier (SUBJECT_ID)\'
 )
 RETURNS TABLE (
   SUBJECT_ID     INT,
@@ -35,7 +35,7 @@ RETURNS TABLE (
   INSURANCE      STRING,
   DIAGNOSIS      STRING
 )
-COMMENT ''Returns the most recent admission record for a given patient. Use this to anchor clinical timelines before querying labs or notes.''
+COMMENT \'Returns the most recent admission record for a given patient. Use this to anchor clinical timelines before querying labs or notes.\'
 RETURN
   SELECT
     SUBJECT_ID,
@@ -62,7 +62,7 @@ EXECUTE IMMEDIATE
 -- -------------------------------------------------------------
 EXECUTE IMMEDIATE
 'CREATE OR REPLACE FUNCTION ' || catalog_name || '.' || schema_name || '.get_abnormal_labs(
-  admission_id INT COMMENT ''Hospital admission identifier (HADM_ID)''
+  admission_id INT COMMENT \'Hospital admission identifier (HADM_ID)\'
 )
 RETURNS TABLE (
   SUBJECT_ID INT,
@@ -73,7 +73,7 @@ RETURNS TABLE (
   VALUEUOM   STRING,
   FLAG       STRING
 )
-COMMENT ''Returns abnormal lab results for a specific hospital admission. Returns subject ID, admission ID, lab item ID, chart time, value, unit, and abnormal flag.''
+COMMENT \'Returns abnormal lab results for a specific hospital admission. Returns subject ID, admission ID, lab item ID, chart time, value, unit, and abnormal flag.\'
 RETURN
   SELECT
     SUBJECT_ID,
@@ -85,7 +85,7 @@ RETURN
     FLAG
   FROM ' || catalog_name || '.' || schema_name || '.lab_events
   WHERE HADM_ID = admission_id
-    AND FLAG = ''abnormal''';
+    AND FLAG = \'abnormal\'';
 
 -- Test it (replace with a real HADM_ID from your admissions table)
 -- EXECUTE IMMEDIATE 'SELECT * FROM ' || catalog_name || '.' || schema_name || '.get_abnormal_labs(135236) LIMIT 10';
@@ -98,7 +98,7 @@ RETURN
 -- -------------------------------------------------------------
 EXECUTE IMMEDIATE
 'CREATE OR REPLACE FUNCTION ' || catalog_name || '.' || schema_name || '.get_lab_type(
-  abnormal_lab_item_id INT COMMENT ''Lab item identifier (ITEMID) from lab_events''
+  abnormal_lab_item_id INT COMMENT \'Lab item identifier (ITEMID) from lab_events\'
 )
 RETURNS TABLE (
   ROW_ID     INT,
@@ -108,7 +108,7 @@ RETURNS TABLE (
   CATEGORY   STRING,
   LOINC_CODE STRING
 )
-COMMENT ''Resolves a lab item ID to its label, fluid type, category, and LOINC code. Use after get_abnormal_labs to understand what each lab item represents. Example: ITEMID=51279 -> Red Blood Cells, Blood, Hematology''
+COMMENT \'Resolves a lab item ID to its label, fluid type, category, and LOINC code. Use after get_abnormal_labs to understand what each lab item represents. Example: ITEMID=51279 -> Red Blood Cells, Blood, Hematology\'
 RETURN
   SELECT *
   FROM ' || catalog_name || '.' || schema_name || '.d_labitems
@@ -126,8 +126,8 @@ RETURN
 -- -------------------------------------------------------------
 EXECUTE IMMEDIATE
 'CREATE OR REPLACE FUNCTION ' || catalog_name || '.' || schema_name || '.get_clinical_notes(
-  admission_id INT  COMMENT ''Hospital admission identifier (HADM_ID)'',
-  chart_date   DATE COMMENT ''Date of the clinical note (CHARTDATE)''
+  admission_id INT  COMMENT \'Hospital admission identifier (HADM_ID)\',
+  chart_date   DATE COMMENT \'Date of the clinical note (CHARTDATE)\'
 )
 RETURNS TABLE (
   SUBJECT_ID INT,
@@ -136,7 +136,7 @@ RETURNS TABLE (
   CHARTDATE  DATE,
   CHARTTIME  TIMESTAMP
 )
-COMMENT ''Returns clinical notes for a specific patient admission on a given date. Use when you need notes for a known HADM_ID and date. Use the Knowledge Assistant for semantic or topic-based retrieval instead.''
+COMMENT \'Returns clinical notes for a specific patient admission on a given date. Use when you need notes for a known HADM_ID and date. Use the Knowledge Assistant for semantic or topic-based retrieval instead.\'
 RETURN
   SELECT
     SUBJECT_ID,
@@ -149,7 +149,7 @@ RETURN
     AND CHARTDATE = chart_date';
 
 -- Test it
--- EXECUTE IMMEDIATE 'SELECT * FROM ' || catalog_name || '.' || schema_name || '.get_clinical_notes(175562, ''2143-01-18'')';
+-- EXECUTE IMMEDIATE 'SELECT * FROM ' || catalog_name || '.' || schema_name || '.get_clinical_notes(175562, \'2143-01-18\')';
 
 
 -- -------------------------------------------------------------
@@ -159,25 +159,25 @@ RETURN
 -- -------------------------------------------------------------
 EXECUTE IMMEDIATE
 'CREATE OR REPLACE FUNCTION ' || catalog_name || '.' || schema_name || '.clinical_notes_vector_search(
-  query STRING COMMENT ''Natural language question or clinical topic to search for in notes''
+  query STRING COMMENT \'Natural language question or clinical topic to search for in notes\'
 )
 RETURNS TABLE (
   page_content STRING,
   metadata     MAP<STRING, STRING>
 )
-COMMENT ''Performs semantic similarity search over MIMIC clinical notes. Returns the most relevant note text and metadata (doc_uri, HADM_ID). Use when you need notes relevant to a clinical topic rather than a specific patient.''
+COMMENT \'Performs semantic similarity search over MIMIC clinical notes. Returns the most relevant note text and metadata (doc_uri, HADM_ID). Use when you need notes relevant to a clinical topic rather than a specific patient.\'
 RETURN
   SELECT
     TEXT     AS page_content,
     map(
-      ''doc_uri'', ROW_ID,
-      ''HADM_ID'', HADM_ID
+      \'doc_uri\', ROW_ID,
+      \'HADM_ID\', HADM_ID
     )        AS metadata
   FROM vector_search(
-    index       => ''' || catalog_name || '.' || schema_name || '.' || vs_index_name || ''',
+    index       => \'' || catalog_name || '.' || schema_name || '.' || vs_index_name || '\',
     query       => query,
     num_results => 5
   )';
 
 -- Test after completing Module 1 (Vector Search Index):
--- EXECUTE IMMEDIATE 'SELECT * FROM ' || catalog_name || '.' || schema_name || '.clinical_notes_vector_search(''patient on ventilator with respiratory failure'')';
+-- EXECUTE IMMEDIATE 'SELECT * FROM ' || catalog_name || '.' || schema_name || '.clinical_notes_vector_search(\'patient on ventilator with respiratory failure\')';
