@@ -24,10 +24,9 @@ EXECUTE IMMEDIATE 'USE SCHEMA '  || schema_name;
 -- -------------------------------------------------------------
 EXECUTE IMMEDIATE
 'SELECT assert_true(
-  (SELECT count(*) FROM system.information_schema.tables
-   WHERE table_catalog = \'' || catalog_name || '\'
-     AND table_schema  = \'' || schema_name  || '\'
-     AND table_name    = \'' || vs_index_name || '\') > 0,
+  (SELECT count(*) FROM ' || catalog_name || '.information_schema.tables
+   WHERE table_schema = \'' || schema_name  || '\'
+     AND table_name   = \'' || vs_index_name || '\') > 0,
   \'Vector Search index (' || catalog_name || '.' || schema_name || '.' || vs_index_name || ') not found. '
   || \'Please complete Module 1 (Vector Search Index) before running this notebook.\')';
 
