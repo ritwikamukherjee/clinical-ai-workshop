@@ -18,6 +18,21 @@ EXECUTE IMMEDIATE 'USE SCHEMA '  || schema_name;
 
 
 -- -------------------------------------------------------------
+-- PRE-FLIGHT CHECK: Verify the Vector Search index exists
+-- The index is created in Module 1. If this fails, go back and
+-- complete Module 1 before running this notebook.
+-- -------------------------------------------------------------
+EXECUTE IMMEDIATE
+'SELECT assert_true(
+  (SELECT count(*) FROM system.information_schema.tables
+   WHERE table_catalog = \'' || catalog_name || '\'
+     AND table_schema  = \'' || schema_name  || '\'
+     AND table_name    = \'' || vs_index_name || '\') > 0,
+  \'Vector Search index (' || catalog_name || '.' || schema_name || '.' || vs_index_name || ') not found. '
+  || \'Please complete Module 1 (Vector Search Index) before running this notebook.\')';
+
+
+-- -------------------------------------------------------------
 -- FUNCTION 1: get_latest_admission
 -- Returns the most recent hospital admission for a patient
 -- Used by: Supervisor Agent to anchor clinical timelines
