@@ -468,10 +468,21 @@ import mlflow
 from mlflow.genai.scorers import Correctness, Completeness
 from mlflow.deployments import get_deploy_client
 
-# Use the SAME experiment as your Supervisor Agent so evaluation traces
-# appear alongside agent traces. Find the experiment ID in the URL:
-# https://<workspace>/ml/experiments/<EXPERIMENT_ID>/traces
-mlflow.set_experiment(experiment_id="<your-supervisor-experiment-id>")
+# ---------------------------------------------------------------
+# TWO values you need (they are NOT the same):
+#
+#   EXPERIMENT_ID  — from the MLflow Experiments UI URL:
+#     https://<workspace>/ml/experiments/<EXPERIMENT_ID>/traces
+#     Example: "2103170509804032"
+#
+#   ENDPOINT_NAME  — from the Serving UI (left nav → Serving):
+#     The name of your deployed Supervisor Agent endpoint
+#     Example: "mas-aa6bab32-endpoint"
+# ---------------------------------------------------------------
+EXPERIMENT_ID = "<your-experiment-id>"       # e.g. "2103170509804032"
+ENDPOINT_NAME = "<your-serving-endpoint>"    # e.g. "mas-aa6bab32-endpoint"
+
+mlflow.set_experiment(experiment_id=EXPERIMENT_ID)
 
 eval_dataset = [
     # --- Patient-specific: admission lookup ---
@@ -536,13 +547,12 @@ eval_dataset = [
 #### Step 1.3 — Run evaluation
 
 ```python
-# Create a predict function that calls your Supervisor Agent endpoint
-# Replace with your agent's serving endpoint name (found in Serving UI)
+# Create a predict function that calls your Supervisor Agent serving endpoint
 client = get_deploy_client("databricks")
 
 def predict_fn(query: str) -> str:
     response = client.predict(
-        endpoint="<your-supervisor-agent-endpoint>",
+        endpoint=ENDPOINT_NAME,
         inputs={"messages": [{"role": "user", "content": query}]},
     )
     return response.choices[0].message.content
@@ -561,7 +571,9 @@ results = mlflow.genai.evaluate(
 results.tables["eval_results"]
 ```
 
-> **Finding your endpoint name:** Go to **Serving** in the left nav → find your Supervisor Agent endpoint → copy the endpoint name (e.g., `mas-aa6bab32-dev-experiment`).
+> **Where to find each value:**
+> - **EXPERIMENT_ID**: Go to **Experiments** in the left nav → open your Supervisor Agent experiment → copy the numeric ID from the URL (`/ml/experiments/<THIS_NUMBER>/traces`)
+> - **ENDPOINT_NAME**: Go to **Serving** in the left nav → find your Supervisor Agent endpoint → copy the endpoint name (e.g., `mas-aa6bab32-endpoint`)
 
 Each result row includes:
 - **`value`**: `"yes"` or `"no"`
