@@ -382,13 +382,12 @@ SELECT * FROM <catalog>.<schema>.clinical_notes_vector_search('patient on ventil
 1. Mosaic AI → **Agents** → **New Agent**
 2. Select type: **Custom Agent** (or Supervisor)
 3. Add tools:
-   - **Knowledge Assistant** (from Module 2)
+   - **Knowledge Assistant** (from Module 2) — handles semantic search over clinical notes
    - `get_latest_admission`
    - `get_abnormal_labs`
    - `get_lab_type`
    - `get_clinical_notes`
-   - `clinical_notes_vector_search`
-   - **Genie room** (add as managed MCP tool from Step 4.2)
+   - **Genie room** (add as managed MCP tool from Step 5.1)
 4. Set system prompt:
    ```
    You are a clinical supervisor agent that answers questions using structured
@@ -401,8 +400,7 @@ SELECT * FROM <catalog>.<schema>.clinical_notes_vector_search('patient on ventil
    - For a specific patient's lab results: use get_abnormal_labs, then
      get_lab_type to resolve item IDs.
    - For notes on a known admission date: use get_clinical_notes.
-   - For semantic search over note content: use clinical_notes_vector_search
-     or the Knowledge Assistant.
+   - For semantic search over note content: use the Knowledge Assistant.
 
    Always cite source metadata (HADM_ID, chart date) in your response.
    Be concise.
