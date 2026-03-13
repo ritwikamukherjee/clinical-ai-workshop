@@ -458,7 +458,10 @@ Use `expected_facts` (a list of short, verifiable factual statements) rather tha
 import mlflow
 from mlflow.genai.scorers import Correctness, Completeness
 
-mlflow.set_experiment("/Shared/clinical_workshop/evaluation")
+# Use the SAME experiment as your Supervisor Agent so evaluation traces
+# appear alongside agent traces. Find the experiment ID in the URL:
+# https://<workspace>/ml/experiments/<EXPERIMENT_ID>/traces
+mlflow.set_experiment(experiment_id="<your-supervisor-experiment-id>")
 
 eval_dataset = [
     # --- Patient-specific: admission lookup ---
