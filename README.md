@@ -190,65 +190,45 @@ the associated diagnoses with citations.
 
 ## Module 3 — Information Extraction (Agent Bricks) (~20 min)
 
-**Goal:** Parse clinical PDFs into text using `ai_parse_document`, then use Agent Bricks: Information Extraction to turn the parsed text into structured fields.
+**Goal:** Convert clinical PDFs to markdown using the **Use PDFs** workflow, then use Agent Bricks: Information Extraction to turn the parsed text into structured fields.
 
 > **Prerequisites:**
 > - Agent Bricks Preview enabled (Workspace settings → **Previews** → enable **Mosaic AI Agent Bricks**)
 > - PDFs uploaded to the `clinical_pdfs` volume (see Setup Step 5)
-> - Databricks Runtime 17.1+ or serverless compute
+> - A SQL Warehouse available to run the PDF conversion pipeline
 >
 > *Note: Agent Bricks is in Beta and may have regional availability limitations.*
 
 ### Step 3.1 — Browse the PDFs
 Catalog Explorer → `<catalog>.<schema>` → `clinical_pdfs` volume → click any PDF to preview
 
-### Step 3.2 — Parse PDFs with `ai_parse_document`
+### Step 3.2 — Convert PDFs to markdown with "Use PDFs"
 
-Before extraction, PDFs must be converted from binary to text. `ai_parse_document` handles this — it reads the binary PDF content and returns a structured representation with text, tables, figures, and metadata.
+PDFs are not natively supported in Information Extraction — they must first be converted to markdown. The **Use PDFs** button automates this by running an `ai_parse_document` pipeline as a workflow job.
 
-**Parse a single PDF to see the output:**
+1. Mosaic AI → **Agents** → click **Use PDFs**
+2. **PDF folder**: select your Unity Catalog volume folder:
+   `/Volumes/<catalog>/<schema>/clinical_pdfs/`
+3. **Destination table**: where the converted markdown will be stored, e.g.:
+   `<catalog>.<schema>.clinical_pdfs_parsed`
+4. **SQL Warehouse**: select an available warehouse to run the conversion
+5. Click **Start** — this creates a workflow job that runs `ai_parse_document` on each PDF
+6. You'll be redirected to the **All workflows** tab — monitor the job until it completes
+
+Once the job finishes, verify the parsed output:
 ```sql
-SELECT
-  path,
-  ai_parse_document(content) AS parsed_doc
-FROM READ_FILES(
-  '/Volumes/<catalog>/<schema>/clinical_pdfs/',
-  format => 'binaryFile'
-)
-LIMIT 1;
+SELECT * FROM <catalog>.<schema>.clinical_pdfs_parsed LIMIT 5;
 ```
 
-**Parse all PDFs and extract the text elements:**
-```sql
-CREATE OR REPLACE TABLE <catalog>.<schema>.clinical_pdfs_parsed AS
-SELECT
-  path,
-  ai_parse_document(content) AS parsed_doc
-FROM READ_FILES(
-  '/Volumes/<catalog>/<schema>/clinical_pdfs/',
-  format => 'binaryFile'
-);
-```
-
-Verify the parsed output:
-```sql
-SELECT
-  path,
-  parsed_doc:document:elements
-FROM <catalog>.<schema>.clinical_pdfs_parsed
-LIMIT 5;
-```
-
-> Each parsed document contains `elements` with types like `text`, `table`, `title`, `section_header`, etc. The `content` field within each element holds the extracted text.
+> The pipeline converts each PDF into markdown text using `ai_parse_document`, extracting text, tables, headers, and other document elements. The resulting table can now be used as input for the extraction agent.
 
 ### Step 3.3 — Create the Information Extraction agent
 
 1. Mosaic AI → **Agents** → click the **Information Extraction** tile → **Build**
 2. **Agent name**: `clinical_pdf_extractor`
 3. **Dataset type**: select **Unlabeled dataset**
-4. **Data source**: point to your parsed table or the `clinical_pdfs` volume:
-   - If using the parsed table: `<catalog>.<schema>.clinical_pdfs_parsed`
-   - If using PDFs directly: `<catalog>.<schema>.clinical_pdfs` (the agent will handle parsing internally)
+4. **Data source**: select the parsed markdown table from Step 3.2:
+   `<catalog>.<schema>.clinical_pdfs_parsed`
 5. **Output schema** — verify or adjust the JSON schema. Use this for clinical notes:
    ```json
    {
