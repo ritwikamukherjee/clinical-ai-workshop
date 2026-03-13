@@ -468,19 +468,10 @@ import mlflow
 from mlflow.genai.scorers import Correctness, Completeness
 from mlflow.deployments import get_deploy_client
 
-# ---------------------------------------------------------------
-# TWO values you need (they are NOT the same):
-#
-#   EXPERIMENT_ID  — from the MLflow Experiments UI URL:
-#     https://<workspace>/ml/experiments/<EXPERIMENT_ID>/traces
-#     Example: "2103170509804032"
-#
-#   ENDPOINT_NAME  — from the Serving UI (left nav → Serving):
-#     The name of your deployed Supervisor Agent endpoint
-#     Example: "mas-aa6bab32-endpoint"
-# ---------------------------------------------------------------
-EXPERIMENT_ID = "<your-experiment-id>"       # e.g. "2103170509804032"
-ENDPOINT_NAME = "<your-serving-endpoint>"    # e.g. "mas-aa6bab32-endpoint"
+# EXPERIMENT_ID — from the MLflow Experiments UI URL
+# ENDPOINT_NAME — from the Serving UI (left nav → Serving)
+EXPERIMENT_ID = "<your-experiment-id>"
+ENDPOINT_NAME = "<your-serving-endpoint>"
 
 mlflow.set_experiment(experiment_id=EXPERIMENT_ID)
 
@@ -553,7 +544,7 @@ client = get_deploy_client("databricks")
 def predict_fn(query: str) -> str:
     response = client.predict(
         endpoint=ENDPOINT_NAME,
-        inputs={"messages": [{"role": "user", "content": query}]},
+        inputs={"input": [{"role": "user", "content": query}]},
     )
     return response.choices[0].message.content
 
@@ -570,10 +561,6 @@ results = mlflow.genai.evaluate(
 # View results — each row shows yes/no + rationale
 results.tables["eval_results"]
 ```
-
-> **Where to find each value:**
-> - **EXPERIMENT_ID**: Go to **Experiments** in the left nav → open your Supervisor Agent experiment → copy the numeric ID from the URL (`/ml/experiments/<THIS_NUMBER>/traces`)
-> - **ENDPOINT_NAME**: Go to **Serving** in the left nav → find your Supervisor Agent endpoint → copy the endpoint name (e.g., `mas-aa6bab32-endpoint`)
 
 Each result row includes:
 - **`value`**: `"yes"` or `"no"`
