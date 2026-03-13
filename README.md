@@ -455,7 +455,7 @@ This is the simplest approach — pass questions, expectations, and scorers toge
 Databricks clusters ship with MLflow 2.x by default. You need MLflow 3.x for `mlflow.genai`:
 
 ```python
-%pip install --upgrade mlflow>=3.0
+%pip install --upgrade mlflow>=3.0 databricks-agents
 dbutils.library.restartPython()
 ```
 
