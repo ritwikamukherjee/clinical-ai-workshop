@@ -188,33 +188,75 @@ the associated diagnoses with citations.
 
 ---
 
-## Module 3 — KIE: Extract from PDFs (~20 min)
+## Module 3 — Information Extraction (Agent Bricks) (~20 min)
 
-**Goal:** Show how `ai_extract()` turns unstructured clinical PDFs into structured data.
+**Goal:** Use Agent Bricks: Information Extraction to turn unstructured clinical PDFs into structured data. This creates a reusable extraction agent that can be deployed as a batch pipeline or queried via SQL.
+
+> **Prerequisites:**
+> - Agent Bricks Preview enabled (Workspace settings → **Previews** → enable **Mosaic AI Agent Bricks**)
+> - PDFs uploaded to the `clinical_pdfs` volume (see Setup Step 5)
+> - Workspace must be in **US-East-1** or **US-West-2**
 
 ### Step 3.1 — Browse the PDFs
-Catalog Explorer → `<catalog>.<schema>` → `clinical_pdfs` volume → click any PDF
+Catalog Explorer → `<catalog>.<schema>` → `clinical_pdfs` volume → click any PDF to preview
 
-### Step 3.2 — Run extraction
-Open a SQL notebook and run:
+### Step 3.2 — Create the Information Extraction agent
 
+1. Mosaic AI → **Agents** → click the **Information Extraction** tile → **Build**
+2. **Agent name**: `clinical_pdf_extractor`
+3. **Dataset type**: select **Unlabeled dataset**
+4. **Data source**: point to your `clinical_pdfs` volume:
+   `<catalog>.<schema>.clinical_pdfs`
+5. **Output schema** — verify or adjust the JSON schema. Use this for clinical notes:
+   ```json
+   {
+     "diagnosis": "string: Primary and secondary diagnoses documented in this note",
+     "medications": "string: Medications administered or ordered, including dosages if mentioned",
+     "procedures": "string: Clinical procedures performed during this encounter",
+     "follow_up_plan": "string: Planned next steps, discharge instructions, or pending orders",
+     "patient_status": "string: Overall patient condition at time of note (e.g., stable, critical, improving)"
+   }
+   ```
+6. **Model**: select **Optimize for Complexity** (clinical notes are long and nuanced)
+7. Click **Create agent**
+
+### Step 3.3 — Refine the extraction
+
+1. In the **Build** tab, review the sample outputs for the first few PDFs
+2. Use **thumbs up / thumbs down** to give feedback on each extraction
+3. Adjust field descriptions in the **Output fields** section if the agent misinterprets a field
+4. Optionally add **global instructions** to guide the agent:
+   ```
+   These are ICU clinical notes from de-identified patient records. Extract
+   only information explicitly stated in the note. Do not infer diagnoses
+   or medications not mentioned. If a field has no relevant information in
+   the document, return null.
+   ```
+5. Click **Save and update** — iterate until the extractions look correct
+
+### Step 3.4 — Test and deploy
+
+**Test in the Playground:**
+1. Click **Open in Playground** on the agent page
+2. Submit a clinical note and verify the structured output
+3. Click **Get code** to see SQL, Python, and curl examples
+
+**Batch extraction via SQL** — use `ai_query` to run the agent across your notes table:
 ```sql
+-- Extract from the notes table using your deployed agent endpoint
 SELECT
   SUBJECT_ID,
   HADM_ID,
   CHARTDATE,
-  ai_extract(TEXT, NAMED_STRUCT(
-    'diagnosis',      'string: Primary and secondary diagnoses documented in this note',
-    'medications',    'string: Medications administered or ordered',
-    'procedures',     'string: Clinical procedures performed',
-    'follow_up_plan', 'string: Planned next steps or discharge instructions',
-    'patient_status', 'string: Overall patient condition at time of note'
-  )) AS extracted
+  ai_query(
+    '<your-agent-endpoint-name>',
+    TEXT
+  ) AS extracted
 FROM <catalog>.<schema>.note_events_20000
 LIMIT 10;
 ```
 
-### Step 3.3 — Store as a Delta table
+**Store as a Delta table:**
 ```sql
 CREATE OR REPLACE TABLE <catalog>.<schema>.note_events_extracted AS
 SELECT
@@ -222,18 +264,26 @@ SELECT
   HADM_ID,
   CHARTDATE,
   TEXT,
-  ai_extract(TEXT, NAMED_STRUCT(
-    'diagnosis',      'string: Primary diagnosis',
-    'medications',    'string: Medications mentioned',
-    'procedures',     'string: Procedures performed',
-    'follow_up_plan', 'string: Follow-up plan',
-    'patient_status', 'string: Patient status'
-  )) AS extracted
+  ai_query(
+    '<your-agent-endpoint-name>',
+    TEXT
+  ) AS extracted
 FROM <catalog>.<schema>.note_events_20000
 LIMIT 100;
 ```
 
-Explore the results: `SELECT SUBJECT_ID, extracted.diagnosis, extracted.patient_status FROM <catalog>.<schema>.note_events_extracted LIMIT 20;`
+Explore the results:
+```sql
+SELECT
+  SUBJECT_ID,
+  extracted.diagnosis,
+  extracted.medications,
+  extracted.patient_status
+FROM <catalog>.<schema>.note_events_extracted
+LIMIT 20;
+```
+
+> **Note:** The Information Extraction agent has a 128k token limit per document. Clinical notes in this dataset are well within this limit. For PDFs specifically, the agent uses `ai_parse_document` internally to convert them to text before extraction.
 
 ---
 
