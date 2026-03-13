@@ -546,10 +546,7 @@ def predict_fn(query: str) -> str:
         endpoint=ENDPOINT_NAME,
         inputs={"input": [{"role": "user", "content": query}]},
     )
-    # Handle different response formats from Databricks agent endpoints
-    if isinstance(response, dict):
-        return response.get("output", response.get("content", str(response)))
-    return str(response)
+    return response["output"][0]["content"][0]["text"]
 
 # Run both scorers — Correctness uses expected_facts, Completeness uses the query
 results = mlflow.genai.evaluate(
