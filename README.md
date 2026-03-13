@@ -450,13 +450,23 @@ SELECT * FROM <catalog>.<schema>.clinical_notes_vector_search('patient on ventil
 
 This is the simplest approach — pass questions, expectations, and scorers together. MLflow runs the agent, creates traces, and evaluates them in one step.
 
-#### Step 1.1 — Create the evaluation dataset
+#### Step 1.1 — Install MLflow 3.x
+
+Databricks clusters ship with MLflow 2.x by default. You need MLflow 3.x for `mlflow.genai`:
+
+```python
+%pip install --upgrade mlflow>=3.0
+dbutils.library.restartPython()
+```
+
+#### Step 1.2 — Create the evaluation dataset
 
 Use `expected_facts` (a list of short, verifiable factual statements) rather than `expected_response`. This gives the Correctness judge flexibility since the agent's wording will vary across runs.
 
 ```python
 import mlflow
 from mlflow.genai.scorers import Correctness, Completeness
+from mlflow.deployments import get_deploy_client
 
 # Use the SAME experiment as your Supervisor Agent so evaluation traces
 # appear alongside agent traces. Find the experiment ID in the URL:
@@ -523,28 +533,24 @@ eval_dataset = [
 ]
 ```
 
-#### Step 1.2 — Install MLflow 3.x
-
-Databricks clusters ship with MLflow 2.x by default. You need MLflow 3.x for `mlflow.genai`:
-
-```python
-%pip install --upgrade mlflow>=3.0
-dbutils.library.restartPython()
-```
-
 #### Step 1.3 — Run evaluation
 
 ```python
-import mlflow
-from mlflow.genai.scorers import Correctness, Completeness
+# Create a predict function that calls your Supervisor Agent endpoint
+# Replace with your agent's serving endpoint name (found in Serving UI)
+client = get_deploy_client("databricks")
 
-mlflow.set_experiment(experiment_id="<your-supervisor-experiment-id>")
+def predict_fn(query: str) -> str:
+    response = client.predict(
+        endpoint="<your-supervisor-agent-endpoint>",
+        inputs={"messages": [{"role": "user", "content": query}]},
+    )
+    return response.choices[0].message.content
 
-# Point to your deployed Supervisor Agent endpoint using endpoints:/ prefix
-# Replace with your agent's serving endpoint name
+# Run both scorers — Correctness uses expected_facts, Completeness uses the query
 results = mlflow.genai.evaluate(
     data=eval_dataset,
-    model="endpoints:/<your-supervisor-agent-endpoint>",
+    predict_fn=predict_fn,
     scorers=[
         Correctness(),
         Completeness(),
@@ -556,8 +562,6 @@ results.tables["eval_results"]
 ```
 
 > **Finding your endpoint name:** Go to **Serving** in the left nav → find your Supervisor Agent endpoint → copy the endpoint name (e.g., `mas-aa6bab32-dev-experiment`).
->
-> The `endpoints:/` prefix tells MLflow to call the serving endpoint directly. The eval dataset `inputs` are sent as requests, and responses are scored against `expected_facts`.
 
 Each result row includes:
 - **`value`**: `"yes"` or `"no"`
