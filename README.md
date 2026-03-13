@@ -361,56 +361,36 @@ SELECT * FROM <catalog>.<schema>.clinical_notes_vector_search('patient on ventil
 
 ## Module 6 — Evaluate with MLflow Scorers (Optional, ~20 min)
 
-**Goal:** Use MLflow's built-in `Correctness` and `Completeness` scorers to evaluate the Supervisor Agent's responses against clinical ground truth. You can do this directly in the **Agent Evaluation UI** or programmatically with Python.
+**Goal:** Use MLflow's built-in `Correctness` and `Completeness` scorers to evaluate the Supervisor Agent's responses against clinical ground truth.
+
+> **Why programmatic?** The Correctness scorer requires ground truth (`expected_facts` or `expected_response`) to be attached to each trace. If you run the scorer from the Experiment → Traces UI without expectations logged, you'll see:
+> `CUSTOM_METRIC_ERROR: Correctness scorer requires either expected_response or expected_facts in the expectations dictionary.`
+>
+> The programmatic approach below handles this correctly — either by passing expectations inline with `mlflow.genai.evaluate()`, or by logging them to existing traces with `mlflow.log_expectation()`.
 
 ### Overview
 
-MLflow provides LLM-as-judge scorers that can be attached to your agent's evaluation:
-
-| Scorer | What it measures | Ground truth format |
+| Scorer | What it measures | Ground truth required? |
 |---|---|---|
-| **Correctness** | Are the facts in the response accurate? | `expected_facts` — a list of factual statements that should appear in the response |
-| **Completeness** | Does the response address all parts of the question? | No ground truth needed — judges against the original query |
+| **Correctness** | Are the facts in the response accurate? | **Yes** — needs `expected_facts` (list of statements) or `expected_response` (single string) |
+| **Completeness** | Does the response address all parts of the question? | **No** — judges against the original query |
 
 ---
 
-### Option A: Agent Evaluation UI (No Code)
+### Approach 1: Batch Evaluation with `mlflow.genai.evaluate()`
 
-You can add Correctness and Completeness scorers directly in the Databricks Agent Playground without writing any code.
+This is the simplest approach — pass questions, expectations, and scorers together. MLflow runs the agent, creates traces, and evaluates them in one step.
 
-#### Step A.1 — Open the Agent Playground
-1. Navigate to your Supervisor Agent in Mosaic AI → **Agents**
-2. Click the **Evaluation** tab
+#### Step 1.1 — Create the evaluation dataset
 
-#### Step A.2 — Add evaluation rows
-Add test questions with expected facts. For each row:
-- **Input**: the question to ask the agent
-- **Expected Facts**: the factual statements the response should contain
-
-Use these clinical examples:
-
-| Input | Expected Facts |
-|---|---|
-| What was patient 22's most recent admission? | Patient 22 has an admission record; The response includes HADM_ID; Admission and discharge dates are included; Admission type is specified |
-| Did patient 22 have any abnormal labs during admission 135236? | Abnormal lab results for HADM_ID 135236 are identified; Lab items are resolved to human-readable names; Units of measure are included |
-| What do the clinical notes say about respiratory failure in ICU patients? | Specific clinical notes are cited (ROW_IDs or HADM_IDs); Respiratory-related findings are mentioned (ventilator, intubation, O2 sat); No diagnoses are fabricated beyond what the notes contain |
-| How many patients were admitted as emergencies? | A specific count of emergency admissions is provided; The count comes from ADMISSION_TYPE = EMERGENCY |
-| For patient 22, get their latest admission, check for abnormal labs, and summarize the clinical picture. | Most recent admission details are included (HADM_ID, dates, diagnosis); Abnormal labs are listed with resolved names; A clinical summary ties admission diagnosis to lab findings; Source metadata is cited |
-
-#### Step A.3 — Select scorers
-Enable **Correctness** and **Completeness** from the scorer list, then run the evaluation. Results will show pass/fail with rationale for each row.
-
----
-
-### Option B: Programmatic Evaluation (Python)
-
-Use this approach if you want to run evaluation in a notebook, automate it in CI, or evaluate a deployed serving endpoint.
-
-#### Step B.1 — Create an evaluation dataset
-
-Build an eval dataset with clinical questions and expected facts derived from the actual data. Use `expected_facts` (not `expected_response`) — this gives the judge flexibility since the agent's wording will vary.
+Use `expected_facts` (a list of short, verifiable factual statements) rather than `expected_response`. This gives the Correctness judge flexibility since the agent's wording will vary across runs.
 
 ```python
+import mlflow
+from mlflow.genai.scorers import Correctness, Completeness
+
+mlflow.set_experiment("/Shared/clinical_workshop/evaluation")
+
 eval_dataset = [
     # --- Patient-specific: admission lookup ---
     {
@@ -441,7 +421,7 @@ eval_dataset = [
         "expectations": {
             "expected_facts": [
                 "The response references specific clinical notes (ROW_IDs or HADM_IDs cited)",
-                "Mentions respiratory-related findings from the notes (e.g., ventilator, intubation, O2 saturation)",
+                "Mentions respiratory-related findings (e.g., ventilator, intubation, O2 saturation)",
                 "Does not fabricate diagnoses not present in the retrieved notes",
             ]
         },
@@ -471,19 +451,16 @@ eval_dataset = [
 ]
 ```
 
-#### Step B.2 — Run evaluation with both scorers
+#### Step 1.2 — Run evaluation
 
 ```python
-from mlflow.genai.scorers import Correctness, Completeness
-import mlflow
-
 # Point to your deployed Supervisor Agent endpoint
 predict_fn = mlflow.genai.to_predict_fn(
     "serving_endpoint",
     endpoint_name="<your-supervisor-agent-endpoint>",
 )
 
-# Run both scorers together
+# Run both scorers — Correctness uses expected_facts, Completeness uses the query
 results = mlflow.genai.evaluate(
     data=eval_dataset,
     predict_fn=predict_fn,
@@ -497,14 +474,86 @@ results = mlflow.genai.evaluate(
 results.tables["eval_results"]
 ```
 
-Each result includes:
+Each result row includes:
 - **`value`**: `"yes"` or `"no"`
-- **`rationale`**: the judge's explanation of why it scored that way
+- **`rationale`**: the judge's detailed explanation
 
-Completeness is especially useful for **multi-part clinical questions** like:
-> *"For patient 22, get their latest admission, check for abnormal labs, and summarize the clinical picture."*
+Navigate to the experiment in MLflow UI → **Evaluation** tab to see results alongside traces.
 
-The Completeness scorer checks that the agent addressed all three parts (admission lookup, lab check, and summary) rather than only answering one.
+---
+
+### Approach 2: Log Expectations to Existing Traces
+
+Use this when you already have traces (e.g., from the Agent Playground or production traffic) and want to annotate them with ground truth so the Correctness scorer can run.
+
+> **This is what fixes the `CUSTOM_METRIC_ERROR`** — the scorer needs expectations attached to each trace before it can evaluate.
+
+#### Step 2.1 — Log expectations to a trace
+
+```python
+import mlflow
+from mlflow.entities import AssessmentSource
+from mlflow.entities.assessment_source import AssessmentSourceType
+
+# Get a trace_id from the Experiment → Traces tab in the MLflow UI
+trace_id = "<your-trace-id>"
+
+# Log expected_facts for the Correctness scorer
+mlflow.log_expectation(
+    trace_id=trace_id,
+    name="expected_facts",
+    value=[
+        "Patient 22 (SUBJECT_ID=22) has an admission record",
+        "The response includes HADM_ID",
+        "The response includes admission and discharge dates",
+        "The admission type is specified (e.g., EMERGENCY, ELECTIVE)",
+    ],
+    source=AssessmentSource(
+        source_type=AssessmentSourceType.HUMAN,
+        source_id="workshop_instructor",
+    ),
+)
+```
+
+#### Step 2.2 — Batch-annotate multiple traces
+
+```python
+# Map trace IDs to their expected facts
+trace_expectations = {
+    "<trace-id-admission-query>": [
+        "Patient 22 has an admission record",
+        "The response includes HADM_ID",
+        "Admission and discharge dates are included",
+    ],
+    "<trace-id-abnormal-labs>": [
+        "Abnormal lab results for HADM_ID 135236 are identified",
+        "Lab items are resolved to human-readable names",
+        "Units of measure are included",
+    ],
+    "<trace-id-respiratory-notes>": [
+        "Specific clinical notes are cited (ROW_IDs or HADM_IDs)",
+        "Respiratory-related findings are mentioned",
+        "No fabricated diagnoses",
+    ],
+}
+
+source = AssessmentSource(
+    source_type=AssessmentSourceType.HUMAN,
+    source_id="workshop_instructor",
+)
+
+for trace_id, facts in trace_expectations.items():
+    mlflow.log_expectation(
+        trace_id=trace_id,
+        name="expected_facts",
+        value=facts,
+        source=source,
+    )
+
+print(f"Logged expectations for {len(trace_expectations)} traces")
+```
+
+After logging expectations, go back to **Experiment → Traces** and re-run the Correctness scorer — it will now find the `expected_facts` and evaluate correctly.
 
 ---
 
@@ -518,7 +567,7 @@ The Completeness scorer checks that the agent addressed all three parts (admissi
 | Population query (Genie) | Wrong count or misattributed filter | Gave count but didn't specify the filter used |
 | Multi-step reasoning | Any factual error in the chain | Answered one sub-question but skipped others |
 
-> **Tip:** Start with 5-10 eval examples covering your key question types. Expand the dataset as you identify failure modes. Use `expected_facts` as short, verifiable statements — not full expected responses.
+> **Tip:** Start with 5-10 eval examples covering your key question types. Expand the dataset as you identify failure modes. Write `expected_facts` as short, verifiable statements — not full expected responses.
 
 ---
 
