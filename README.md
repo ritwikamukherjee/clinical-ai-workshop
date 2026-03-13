@@ -523,19 +523,28 @@ eval_dataset = [
 ]
 ```
 
-#### Step 1.2 — Run evaluation
+#### Step 1.2 — Install MLflow 3.x
+
+Databricks clusters ship with MLflow 2.x by default. You need MLflow 3.x for `mlflow.genai`:
 
 ```python
-# Point to your deployed Supervisor Agent endpoint
-predict_fn = mlflow.genai.to_predict_fn(
-    "serving_endpoint",
-    endpoint_name="<your-supervisor-agent-endpoint>",
-)
+%pip install --upgrade mlflow>=3.0
+dbutils.library.restartPython()
+```
 
-# Run both scorers — Correctness uses expected_facts, Completeness uses the query
+#### Step 1.3 — Run evaluation
+
+```python
+import mlflow
+from mlflow.genai.scorers import Correctness, Completeness
+
+mlflow.set_experiment(experiment_id="<your-supervisor-experiment-id>")
+
+# Point to your deployed Supervisor Agent endpoint using endpoints:/ prefix
+# Replace with your agent's serving endpoint name
 results = mlflow.genai.evaluate(
     data=eval_dataset,
-    predict_fn=predict_fn,
+    model="endpoints:/<your-supervisor-agent-endpoint>",
     scorers=[
         Correctness(),
         Completeness(),
@@ -545,6 +554,10 @@ results = mlflow.genai.evaluate(
 # View results — each row shows yes/no + rationale
 results.tables["eval_results"]
 ```
+
+> **Finding your endpoint name:** Go to **Serving** in the left nav → find your Supervisor Agent endpoint → copy the endpoint name (e.g., `mas-aa6bab32-dev-experiment`).
+>
+> The `endpoints:/` prefix tells MLflow to call the serving endpoint directly. The eval dataset `inputs` are sent as requests, and responses are scored against `expected_facts`.
 
 Each result row includes:
 - **`value`**: `"yes"` or `"no"`
