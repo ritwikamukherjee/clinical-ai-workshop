@@ -190,23 +190,65 @@ the associated diagnoses with citations.
 
 ## Module 3 — Information Extraction (Agent Bricks) (~20 min)
 
-**Goal:** Use Agent Bricks: Information Extraction to turn unstructured clinical PDFs into structured data. This creates a reusable extraction agent that can be deployed as a batch pipeline or queried via SQL.
+**Goal:** Parse clinical PDFs into text using `ai_parse_document`, then use Agent Bricks: Information Extraction to turn the parsed text into structured fields.
 
 > **Prerequisites:**
 > - Agent Bricks Preview enabled (Workspace settings → **Previews** → enable **Mosaic AI Agent Bricks**)
 > - PDFs uploaded to the `clinical_pdfs` volume (see Setup Step 5)
-> - Workspace must be in **US-East-1** or **US-West-2**
+> - Databricks Runtime 17.1+ or serverless compute
+>
+> *Note: Agent Bricks is in Beta and may have regional availability limitations.*
 
 ### Step 3.1 — Browse the PDFs
 Catalog Explorer → `<catalog>.<schema>` → `clinical_pdfs` volume → click any PDF to preview
 
-### Step 3.2 — Create the Information Extraction agent
+### Step 3.2 — Parse PDFs with `ai_parse_document`
+
+Before extraction, PDFs must be converted from binary to text. `ai_parse_document` handles this — it reads the binary PDF content and returns a structured representation with text, tables, figures, and metadata.
+
+**Parse a single PDF to see the output:**
+```sql
+SELECT
+  path,
+  ai_parse_document(content) AS parsed_doc
+FROM READ_FILES(
+  '/Volumes/<catalog>/<schema>/clinical_pdfs/',
+  format => 'binaryFile'
+)
+LIMIT 1;
+```
+
+**Parse all PDFs and extract the text elements:**
+```sql
+CREATE OR REPLACE TABLE <catalog>.<schema>.clinical_pdfs_parsed AS
+SELECT
+  path,
+  ai_parse_document(content) AS parsed_doc
+FROM READ_FILES(
+  '/Volumes/<catalog>/<schema>/clinical_pdfs/',
+  format => 'binaryFile'
+);
+```
+
+Verify the parsed output:
+```sql
+SELECT
+  path,
+  parsed_doc:document:elements
+FROM <catalog>.<schema>.clinical_pdfs_parsed
+LIMIT 5;
+```
+
+> Each parsed document contains `elements` with types like `text`, `table`, `title`, `section_header`, etc. The `content` field within each element holds the extracted text.
+
+### Step 3.3 — Create the Information Extraction agent
 
 1. Mosaic AI → **Agents** → click the **Information Extraction** tile → **Build**
 2. **Agent name**: `clinical_pdf_extractor`
 3. **Dataset type**: select **Unlabeled dataset**
-4. **Data source**: point to your `clinical_pdfs` volume:
-   `<catalog>.<schema>.clinical_pdfs`
+4. **Data source**: point to your parsed table or the `clinical_pdfs` volume:
+   - If using the parsed table: `<catalog>.<schema>.clinical_pdfs_parsed`
+   - If using PDFs directly: `<catalog>.<schema>.clinical_pdfs` (the agent will handle parsing internally)
 5. **Output schema** — verify or adjust the JSON schema. Use this for clinical notes:
    ```json
    {
@@ -220,7 +262,7 @@ Catalog Explorer → `<catalog>.<schema>` → `clinical_pdfs` volume → click a
 6. **Model**: select **Optimize for Complexity** (clinical notes are long and nuanced)
 7. Click **Create agent**
 
-### Step 3.3 — Refine the extraction
+### Step 3.4 — Refine the extraction
 
 1. In the **Build** tab, review the sample outputs for the first few PDFs
 2. Use **thumbs up / thumbs down** to give feedback on each extraction
@@ -234,7 +276,7 @@ Catalog Explorer → `<catalog>.<schema>` → `clinical_pdfs` volume → click a
    ```
 5. Click **Save and update** — iterate until the extractions look correct
 
-### Step 3.4 — Test and deploy
+### Step 3.5 — Test and deploy
 
 **Test in the Playground:**
 1. Click **Open in Playground** on the agent page
@@ -243,7 +285,6 @@ Catalog Explorer → `<catalog>.<schema>` → `clinical_pdfs` volume → click a
 
 **Batch extraction via SQL** — use `ai_query` to run the agent across your notes table:
 ```sql
--- Extract from the notes table using your deployed agent endpoint
 SELECT
   SUBJECT_ID,
   HADM_ID,
@@ -283,7 +324,7 @@ FROM <catalog>.<schema>.note_events_extracted
 LIMIT 20;
 ```
 
-> **Note:** The Information Extraction agent has a 128k token limit per document. Clinical notes in this dataset are well within this limit. For PDFs specifically, the agent uses `ai_parse_document` internally to convert them to text before extraction.
+> **Note:** The Information Extraction agent has a 128k token limit per document. Clinical notes in this dataset are well within this limit.
 
 ---
 
