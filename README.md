@@ -197,7 +197,6 @@ the associated diagnoses with citations.
 > - PDFs uploaded to the `clinical_pdfs` volume (see Setup Step 5)
 > - A SQL Warehouse available to run the PDF conversion pipeline
 >
-> *Note: Agent Bricks is in Beta and may have regional availability limitations.*
 
 ### Step 3.1 — Browse the PDFs
 Catalog Explorer → `<catalog>.<schema>` → `clinical_pdfs` volume → click any PDF to preview
@@ -655,7 +654,47 @@ After logging expectations, go back to **Experiment → Traces** and re-run the 
 | Population query (Genie) | Wrong count or misattributed filter | Gave count but didn't specify the filter used |
 | Multi-step reasoning | Any factual error in the chain | Answered one sub-question but skipped others |
 
-> **Tip:** Start with 5-10 eval examples covering your key question types. Expand the dataset as you identify failure modes. Write `expected_facts` as short, verifiable statements — not full expected responses.
+
+---
+
+## Module 7 — Deploy as a Databricks App (~10 min)
+
+**Goal:** Serve the Supervisor Agent as a shareable chat application using Databricks Apps.
+
+> **Prerequisites:**
+> - Supervisor Agent created and tested (Module 5)
+> - The agent's Model Serving endpoint is in **Ready** state (check **Serving** in the left nav)
+
+### Step 7.1 — Create the App
+
+1. Click **+ New** → **App** in the workspace top nav
+2. Select the **Agents** tab
+3. Choose the **Chatbot UI** template — this is a Streamlit-based chat UI that connects to any serving endpoint
+4. **App name**: `clinical-supervisor-app` (lowercase, numbers, hyphens only — cannot be changed after creation)
+
+### Step 7.2 — Configure resources
+
+On the **Configure** step, add the resources the app needs. Each resource injects credentials into the app via environment variables through the `valueFrom` field in `app.yaml` — no hardcoded tokens.
+
+Click **+ Add Resource** for each:
+
+| Resource type | Resource to select | Permission | Why it's needed |
+|---|---|---|---|
+| **Model serving endpoints** | Your Supervisor Agent endpoint and the Knowledge assistant endpoint | `CAN_QUERY` |
+| **Genie space** | Your Genie Room (Module 5.1) | `CAN_VIEW` | 
+| **UC functions** | All UC functions tied to the Supervisor agent | `CAN_EXECUTE` |
+
+> The app runs under its own **service principal** — adding resources here grants that service principal the permissions it needs. Without these bindings, the agent's tool calls will fail with permission errors even though the endpoint itself works.
+
+### Step 7.3 — Install and verify
+
+1. Click **Install** — the app builds and deploys (typically 1-2 min)
+2. Once status shows **Running**, click the generated app URL to open the chat UI
+3. The Chatbot App auto-detects the endpoint's task type (chat/completions, agent/v2/chat, or agent/v1/responses) and streams responses accordingly
+4. Test with the same demo questions from Module 5:
+   - `"What was patient 22's most recent admission?"`
+   - `"How many patients were admitted as emergencies?"`
+   - `"What do the clinical notes say about respiratory failure?"`
 
 ---
 
