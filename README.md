@@ -2,10 +2,10 @@
 **Databricks | HLS Payer Series | 2-3 hour session**
 
 A hands-on workshop for new Databricks users that demonstrates building a clinical AI assistant using:
-- **Vector Search Index** — Embed 20,000 clinical notes for semantic retrieval
-- **Knowledge Assistant (KA)** — RAG agent over clinical notes
-- **KIE** — Extract structured fields from clinical PDFs using `ai_extract()`
-- **Supervisor Agent** — Orchestrates Genie (managed MCP) + UC functions + Knowledge Assistant
+- **Vector Search Index** - Embed 20,000 clinical notes for semantic retrieval
+- **Knowledge Assistant (KA)** - RAG agent over clinical notes
+- **KIE** - Extract structured fields from clinical PDFs using `ai_extract()`
+- **Supervisor Agent** - Orchestrates Genie (managed MCP) + UC functions + Knowledge Assistant
 
 All data is synthetic (MIMIC-III de-identified, cohort-scoped to 1,590 admissions).
 
@@ -15,7 +15,7 @@ All data is synthetic (MIMIC-III de-identified, cohort-scoped to 1,590 admission
 
 ```
 clinical_workshop/
-├── parquet/                     # Source data — loaded by setup notebook
+├── parquet/                     # Source data - loaded by setup notebook
 │   ├── note_events_20000/       # 20,000 clinical notes (KA + VS corpus)
 │   ├── admissions/              # 1,590 hospital admissions
 │   ├── patients/                # 1,325 patients
@@ -25,7 +25,7 @@ clinical_workshop/
 │   └── d_icd_diagnoses/         # 14,567 ICD-9 code descriptions (lookup)
 ├── pdfs/                        # 30 clinical note PDFs for KIE module
 ├── notebooks/
-│   ├── 00_setup.py              # Run once — creates schema, loads tables
+│   ├── 00_setup.py              # Run once - creates schema, loads tables
 │   └── 01_create_functions.sql  # Creates 5 UC functions for Supervisor Agent
 └── README.md                    # This file
 ```
@@ -41,7 +41,7 @@ clinical_workshop/
 
 ---
 
-## Step 0 — Deploy Data (Instructor, Pre-workshop)
+## Step 0 - Deploy Data (Instructor, Pre-workshop)
 
 ### Option A: CLI (fully automated)
 
@@ -88,16 +88,16 @@ Then open `/Shared/clinical_workshop/00_setup` in the workspace, set the **catal
 
 ---
 
-## Module 1 — Vector Search Index (~15 min)
+## Module 1 - Vector Search Index (~15 min)
 
 **Goal:** Create a vector index on `note_events_20000`. This powers both the Knowledge Assistant and the `clinical_notes_vector_search` UC function.
 
-### Step 1.1 — Create a Vector Search endpoint (if none exists)
+### Step 1.1 - Create a Vector Search endpoint (if none exists)
 Mosaic AI → Vector Search → **Create endpoint**
 - Name: `workshop-vs-endpoint`
 - Wait for status: **Online**
 
-### Step 1.2 — Create the index
+### Step 1.2 - Create the index
 1. Catalog Explorer → `<catalog>.<schema>.note_events_20000`
 2. Click **Create** → **Vector Search Index**
 3. Configure:
@@ -107,26 +107,26 @@ Mosaic AI → Vector Search → **Create endpoint**
    - **Embedding model**: `databricks-gte-large-en`
    - **Endpoint**: `workshop-vs-endpoint`
    - **Sync**: Triggered
-4. Click **Create** — indexing ~5-10 min for 20K rows
+4. Click **Create** - indexing ~5-10 min for 20K rows
 
-### Step 1.3 — Verify the index
+### Step 1.3 - Verify the index
 Mosaic AI → Vector Search → select `note_events_vs_index` → confirm **Status: Online**
 
-> **Note:** Keep the index name handy — you'll use it as the `vs_index` widget value in `01_create_functions.sql`.
+> **Note:** Keep the index name handy - you'll use it as the `vs_index` widget value in `01_create_functions.sql`.
 
 ---
 
-## Module 2 — Knowledge Assistant (~15 min)
+## Module 2 - Knowledge Assistant (~15 min)
 
 **Goal:** Build a KA agent that does semantic retrieval over the vector index.
 
-### Step 2.1 — Create the Knowledge Assistant
+### Step 2.1 - Create the Knowledge Assistant
 1. Mosaic AI → **Agents** → **New Agent**
 2. Select type: **Knowledge Assistant**
 3. Attach vector index: `note_events_vs_index`
 4. When prompted for column mappings:
-   - **Doc URI Column**: `ROW_ID` — unique note identifier, used as the citation reference so the agent can tell you which note it retrieved from
-   - **Text Column**: `TEXT` — the raw clinical note text, used for semantic retrieval
+   - **Doc URI Column**: `ROW_ID` - unique note identifier, used as the citation reference so the agent can tell you which note it retrieved from
+   - **Text Column**: `TEXT` - the raw clinical note text, used for semantic retrieval
 5. Set the **knowledge source description** (helps the KA understand what it's searching over):
    ```
    20,000 de-identified ICU clinical notes from the MIMIC-III dataset covering
@@ -154,12 +154,12 @@ Mosaic AI → Vector Search → select `note_events_vs_index` → confirm **Stat
    - Be concise. Use clinical terminology appropriate for a healthcare
      professional audience.
    ```
-7. **Save** the agent — you'll add it as a tool in Module 5 (Supervisor Agent)
+7. **Save** the agent - you'll add it as a tool in Module 5 (Supervisor Agent)
 
-### Step 2.2 — Test the Knowledge Assistant
+### Step 2.2 - Test the Knowledge Assistant
 Try these questions in the agent playground. Expected behavior is shown below each question.
 
-**Example 1 — Topic-based retrieval:**
+**Example 1 - Topic-based retrieval:**
 ```
 Q: What are common causes of low oxygen saturation in ICU patients?
 
@@ -168,7 +168,7 @@ and synthesizes common causes (e.g., pneumonia, ARDS, pulmonary embolism,
 fluid overload). Each cause is backed by one or more ROW_ID citations.
 ```
 
-**Example 2 — Specific clinical scenario:**
+**Example 2 - Specific clinical scenario:**
 ```
 Q: What complications are documented after vascular surgery procedures?
 
@@ -177,7 +177,7 @@ summarizes documented complications (e.g., bleeding, infection, graft
 occlusion), citing the relevant ROW_IDs.
 ```
 
-**Example 3 — Care pattern question:**
+**Example 3 - Care pattern question:**
 ```
 Q: What diagnoses are most associated with repeated respiratory interventions?
 
@@ -188,7 +188,7 @@ the associated diagnoses with citations.
 
 ---
 
-## Module 3 — Information Extraction (Agent Bricks) (~20 min)
+## Module 3 - Information Extraction (Agent Bricks) (~20 min)
 
 **Goal:** Convert clinical PDFs to markdown using the **Use PDFs** workflow, then use Agent Bricks: Information Extraction to turn the parsed text into structured fields.
 
@@ -198,12 +198,12 @@ the associated diagnoses with citations.
 > - A SQL Warehouse available to run the PDF conversion pipeline
 >
 
-### Step 3.1 — Browse the PDFs
+### Step 3.1 - Browse the PDFs
 Catalog Explorer → `<catalog>.<schema>` → `clinical_pdfs` volume → click any PDF to preview
 
-### Step 3.2 — Convert PDFs to markdown with "Use PDFs"
+### Step 3.2 - Convert PDFs to markdown with "Use PDFs"
 
-PDFs are not natively supported in Information Extraction — they must first be converted to markdown. The **Use PDFs** button automates this by running an `ai_parse_document` pipeline as a workflow job.
+PDFs are not natively supported in Information Extraction - they must first be converted to markdown. The **Use PDFs** button automates this by running an `ai_parse_document` pipeline as a workflow job.
 
 1. Mosaic AI → **Agents** → click **Use PDFs**
 2. **PDF folder**: select your Unity Catalog volume folder:
@@ -211,8 +211,8 @@ PDFs are not natively supported in Information Extraction — they must first be
 3. **Destination table**: where the converted markdown will be stored, e.g.:
    `<catalog>.<schema>.clinical_pdfs_parsed`
 4. **SQL Warehouse**: select an available warehouse to run the conversion
-5. Click **Start** — this creates a workflow job that runs `ai_parse_document` on each PDF
-6. You'll be redirected to the **All workflows** tab — monitor the job until it completes
+5. Click **Start** - this creates a workflow job that runs `ai_parse_document` on each PDF
+6. You'll be redirected to the **All workflows** tab - monitor the job until it completes
 
 Once the job finishes, verify the parsed output:
 ```sql
@@ -221,14 +221,14 @@ SELECT * FROM <catalog>.<schema>.clinical_pdfs_parsed LIMIT 5;
 
 > The pipeline converts each PDF into markdown text using `ai_parse_document`, extracting text, tables, headers, and other document elements. The resulting table can now be used as input for the extraction agent.
 
-### Step 3.3 — Create the Information Extraction agent
+### Step 3.3 - Create the Information Extraction agent
 
 1. Mosaic AI → **Agents** → click the **Information Extraction** tile → **Build**
 2. **Agent name**: `clinical_pdf_extractor`
 3. **Dataset type**: select **Unlabeled dataset**
 4. **Data source**: select the parsed markdown table from Step 3.2:
    `<catalog>.<schema>.clinical_pdfs_parsed`
-5. **Output schema** — verify or adjust the JSON schema. Use this for clinical notes:
+5. **Output schema** - verify or adjust the JSON schema. Use this for clinical notes:
    ```json
    {
      "diagnosis": "string: Primary and secondary diagnoses documented in this note",
@@ -241,7 +241,7 @@ SELECT * FROM <catalog>.<schema>.clinical_pdfs_parsed LIMIT 5;
 6. **Model**: select **Optimize for Complexity** (clinical notes are long and nuanced)
 7. Click **Create agent**
 
-### Step 3.4 — Refine the extraction
+### Step 3.4 - Refine the extraction
 
 1. In the **Build** tab, review the sample outputs for the first few PDFs
 2. Use **thumbs up / thumbs down** to give feedback on each extraction
@@ -253,16 +253,16 @@ SELECT * FROM <catalog>.<schema>.clinical_pdfs_parsed LIMIT 5;
    or medications not mentioned. If a field has no relevant information in
    the document, return null.
    ```
-5. Click **Save and update** — iterate until the extractions look correct
+5. Click **Save and update** - iterate until the extractions look correct
 
-### Step 3.5 — Test and deploy
+### Step 3.5 - Test and deploy
 
 **Test in the Playground:**
 1. Click **Open in Playground** on the agent page
 2. Submit a clinical note and verify the structured output
 3. Click **Get code** to see SQL, Python, and curl examples
 
-**Batch extraction via SQL** — use `ai_query` to run the agent across your notes table:
+**Batch extraction via SQL** - use `ai_query` to run the agent across your notes table:
 ```sql
 SELECT
   SUBJECT_ID,
@@ -307,7 +307,7 @@ LIMIT 20;
 
 ---
 
-## Module 4 — UC Functions (~10 min)
+## Module 4 - UC Functions (~10 min)
 
 **Goal:** Register the UC tool functions used by the Supervisor Agent.
 
@@ -352,11 +352,11 @@ SELECT * FROM <catalog>.<schema>.clinical_notes_vector_search('patient on ventil
 
 ---
 
-## Module 5 — Supervisor Agent (~35 min)
+## Module 5 - Supervisor Agent (~35 min)
 
 **Goal:** Wire the Knowledge Assistant, UC functions, and Genie into a single orchestrating agent.
 
-### Step 5.1 — Create the Genie Room (Managed MCP)
+### Step 5.1 - Create the Genie Room (Managed MCP)
 
 1. **Genie** → **New Genie Room**
 2. Add tables:
@@ -372,16 +372,16 @@ SELECT * FROM <catalog>.<schema>.clinical_notes_vector_search('patient on ventil
    lab results, diagnoses, and patient demographics for 1,325 patients across
    1,590 hospital stays. Data is synthetic (MIMIC-III).
    ```
-4. **Save** — test with: `How many patients were admitted as emergencies?`
+4. **Save** - test with: `How many patients were admitted as emergencies?`
 
 ---
 
-### Step 5.2 — Build the Supervisor Agent
+### Step 5.2 - Build the Supervisor Agent
 
 1. Mosaic AI → **Agents** → **New Agent**
 2. Select type: **Custom Agent** (or Supervisor)
 3. Add tools:
-   - **Knowledge Assistant** (from Module 2) — handles semantic search over clinical notes
+   - **Knowledge Assistant** (from Module 2) - handles semantic search over clinical notes
    - `get_latest_admission`
    - `get_abnormal_labs`
    - `get_lab_type`
@@ -427,29 +427,29 @@ SELECT * FROM <catalog>.<schema>.clinical_notes_vector_search('patient on ventil
 
 ---
 
-## Module 6 — Evaluate with MLflow Scorers (Optional, ~20 min)
+## Module 6 - Evaluate with MLflow Scorers (Optional, ~20 min)
 
 **Goal:** Use MLflow's built-in `Correctness` and `Completeness` scorers to evaluate the Supervisor Agent's responses against clinical ground truth.
 
 > **Why programmatic?** The Correctness scorer requires ground truth (`expected_facts` or `expected_response`) to be attached to each trace. If you run the scorer from the Experiment → Traces UI without expectations logged, you'll see:
 > `CUSTOM_METRIC_ERROR: Correctness scorer requires either expected_response or expected_facts in the expectations dictionary.`
 >
-> The programmatic approach below handles this correctly — either by passing expectations inline with `mlflow.genai.evaluate()`, or by logging them to existing traces with `mlflow.log_expectation()`.
+> The programmatic approach below handles this correctly - either by passing expectations inline with `mlflow.genai.evaluate()`, or by logging them to existing traces with `mlflow.log_expectation()`.
 
 ### Overview
 
 | Scorer | What it measures | Ground truth required? |
 |---|---|---|
-| **Correctness** | Are the facts in the response accurate? | **Yes** — needs `expected_facts` (list of statements) or `expected_response` (single string) |
-| **Completeness** | Does the response address all parts of the question? | **No** — judges against the original query |
+| **Correctness** | Are the facts in the response accurate? | **Yes** - needs `expected_facts` (list of statements) or `expected_response` (single string) |
+| **Completeness** | Does the response address all parts of the question? | **No** - judges against the original query |
 
 ---
 
 ### Approach 1: Batch Evaluation with `mlflow.genai.evaluate()`
 
-This is the simplest approach — pass questions, expectations, and scorers together. MLflow runs the agent, creates traces, and evaluates them in one step.
+This is the simplest approach - pass questions, expectations, and scorers together. MLflow runs the agent, creates traces, and evaluates them in one step.
 
-#### Step 1.1 — Install MLflow 3.x
+#### Step 1.1 - Install MLflow 3.x
 
 Databricks clusters ship with MLflow 2.x by default. You need MLflow 3.x for `mlflow.genai`:
 
@@ -458,7 +458,7 @@ Databricks clusters ship with MLflow 2.x by default. You need MLflow 3.x for `ml
 dbutils.library.restartPython()
 ```
 
-#### Step 1.2 — Create the evaluation dataset
+#### Step 1.2 - Create the evaluation dataset
 
 Use `expected_facts` (a list of short, verifiable factual statements) rather than `expected_response`. This gives the Correctness judge flexibility since the agent's wording will vary across runs.
 
@@ -467,8 +467,8 @@ import mlflow
 from mlflow.genai.scorers import Correctness, Completeness
 from mlflow.deployments import get_deploy_client
 
-# EXPERIMENT_ID — from the MLflow Experiments UI URL
-# ENDPOINT_NAME — from the Serving UI (left nav → Serving)
+# EXPERIMENT_ID - from the MLflow Experiments UI URL
+# ENDPOINT_NAME - from the Serving UI (left nav → Serving)
 EXPERIMENT_ID = "<your-experiment-id>"
 ENDPOINT_NAME = "<your-serving-endpoint>"
 
@@ -534,7 +534,7 @@ eval_dataset = [
 ]
 ```
 
-#### Step 1.3 — Run evaluation
+#### Step 1.3 - Run evaluation
 
 ```python
 # Create a predict function that calls your Supervisor Agent serving endpoint
@@ -547,7 +547,7 @@ def predict_fn(query: str) -> str:
     )
     return response["output"][0]["content"][0]["text"]
 
-# Run both scorers — Correctness uses expected_facts, Completeness uses the query
+# Run both scorers - Correctness uses expected_facts, Completeness uses the query
 results = mlflow.genai.evaluate(
     data=eval_dataset,
     predict_fn=predict_fn,
@@ -557,7 +557,7 @@ results = mlflow.genai.evaluate(
     ],
 )
 
-# View results — each row shows yes/no + rationale
+# View results - each row shows yes/no + rationale
 results.tables["eval_results"]
 ```
 
@@ -573,9 +573,9 @@ Navigate to the experiment in MLflow UI → **Evaluation** tab to see results al
 
 Use this when you already have traces (e.g., from the Agent Playground or production traffic) and want to annotate them with ground truth so the Correctness scorer can run.
 
-> **This is what fixes the `CUSTOM_METRIC_ERROR`** — the scorer needs expectations attached to each trace before it can evaluate.
+> **This is what fixes the `CUSTOM_METRIC_ERROR`** - the scorer needs expectations attached to each trace before it can evaluate.
 
-#### Step 2.1 — Log expectations to a trace
+#### Step 2.1 - Log expectations to a trace
 
 ```python
 import mlflow
@@ -602,7 +602,7 @@ mlflow.log_expectation(
 )
 ```
 
-#### Step 2.2 — Batch-annotate multiple traces
+#### Step 2.2 - Batch-annotate multiple traces
 
 ```python
 # Map trace IDs to their expected facts
@@ -640,7 +640,7 @@ for trace_id, facts in trace_expectations.items():
 print(f"Logged expectations for {len(trace_expectations)} traces")
 ```
 
-After logging expectations, go back to **Experiment → Traces** and re-run the Correctness scorer — it will now find the `expected_facts` and evaluate correctly.
+After logging expectations, go back to **Experiment → Traces** and re-run the Correctness scorer - it will now find the `expected_facts` and evaluate correctly.
 
 ---
 
@@ -657,7 +657,7 @@ After logging expectations, go back to **Experiment → Traces** and re-run the 
 
 ---
 
-## Module 7 — Deploy as a Databricks App (~10 min)
+## Module 7 - Deploy as a Databricks App (~10 min)
 
 **Goal:** Serve the Supervisor Agent as a shareable chat application using Databricks Apps.
 
@@ -665,16 +665,16 @@ After logging expectations, go back to **Experiment → Traces** and re-run the 
 > - Supervisor Agent created and tested (Module 5)
 > - The agent's Model Serving endpoint is in **Ready** state (check **Serving** in the left nav)
 
-### Step 7.1 — Create the App
+### Step 7.1 - Create the App
 
 1. Click **+ New** → **App** in the workspace top nav
 2. Select the **Agents** tab
-3. Choose the **Chatbot UI** template — this is a Streamlit-based chat UI that connects to any serving endpoint
-4. **App name**: `clinical-supervisor-app` (lowercase, numbers, hyphens only — cannot be changed after creation)
+3. Choose the **Chatbot UI** template - this is a Streamlit-based chat UI that connects to any serving endpoint
+4. **App name**: `clinical-supervisor-app` (lowercase, numbers, hyphens only - cannot be changed after creation)
 
-### Step 7.2 — Configure resources
+### Step 7.2 - Configure resources
 
-On the **Configure** step, add the resources the app needs. Each resource injects credentials into the app via environment variables through the `valueFrom` field in `app.yaml` — no hardcoded tokens.
+On the **Configure** step, add the resources the app needs. Each resource injects credentials into the app via environment variables through the `valueFrom` field in `app.yaml` - no hardcoded tokens.
 
 Click **+ Add Resource** for each:
 
@@ -684,17 +684,69 @@ Click **+ Add Resource** for each:
 | **Genie space** | Your Genie Room (Module 5.1) | `CAN_VIEW` | 
 | **UC functions** | All UC functions tied to the Supervisor agent | `CAN_EXECUTE` |
 
-> The app runs under its own **service principal** — adding resources here grants that service principal the permissions it needs. Without these bindings, the agent's tool calls will fail with permission errors even though the endpoint itself works.
+> The app runs under its own **service principal** - adding resources here grants that service principal the permissions it needs. Without these bindings, the agent's tool calls will fail with permission errors even though the endpoint itself works.
 
-### Step 7.3 — Install and verify
+### Step 7.3 - Install and verify
 
-1. Click **Install** — the app builds and deploys (typically 1-2 min)
+1. Click **Install** - the app builds and deploys (typically 1-2 min)
 2. Once status shows **Running**, click the generated app URL to open the chat UI
 3. The Chatbot App auto-detects the endpoint's task type (chat/completions, agent/v2/chat, or agent/v1/responses) and streams responses accordingly
 4. Test with the same demo questions from Module 5:
    - `"What was patient 22's most recent admission?"`
    - `"How many patients were admitted as emergencies?"`
    - `"What do the clinical notes say about respiratory failure?"`
+
+---
+
+## Module 8 - Add PubMed Evidence Retrieval (Optional, ~15 min)
+
+**Goal:** Extend the Supervisor Agent with a PubMed MCP connection so it can retrieve published medical literature alongside patient data.
+
+> This module is for advanced users who complete prior steps early. It adds an external MCP server to the Supervisor, reinforcing the same pattern used with Genie but against an external knowledge source.
+
+### Step 8.1 - Create the MCP connection
+
+Run in the SQL Editor:
+```sql
+DROP CONNECTION IF EXISTS <catalog>.<schema>.conn_pubmed_mcp;
+CREATE CONNECTION <catalog>.<schema>.conn_pubmed_mcp
+TYPE HTTP
+OPTIONS (
+  host 'https://glama.ai',
+  base_path '/endpoints/mp1ke6xrpi/mcp',
+  bearer_token '<your-bearer-token>'
+)
+COMMENT 'PubMed MCP server (openpharma via glama.ai)';
+```
+
+### Step 8.2 - Add PubMed as a tool on the Supervisor Agent
+
+1. Open your Supervisor Agent (Module 5)
+2. Add the PubMed MCP connection as a tool
+3. Available PubMed tools:
+   - `search_keywords` - keyword search across PubMed articles
+   - `search_advanced` - structured queries (author, journal, date range, MeSH terms)
+   - `get_article_metadata` - fetch title, abstract, authors, DOI for a given PMID
+   - `get_article_pdf` - retrieve the full-text PDF when available
+
+4. Update the system prompt to include a PubMed routing rule:
+   ```
+   - For evidence-based questions (treatment guidelines, drug interactions,
+     published research on a condition): use the PubMed tools. Start with
+     search_keywords or search_advanced, then get_article_metadata for
+     relevant results. Cite PMIDs in your response.
+   ```
+
+### Step 8.3 - Test the extended agent
+
+Try questions that combine patient data with published evidence:
+
+- *"Patient 22 was diagnosed with sepsis. What does recent literature say about optimal antibiotic timing in sepsis?"*
+  > Agent should: `get_latest_admission(22)` → confirm diagnosis → `search_keywords("sepsis antibiotic timing")` → `get_article_metadata(pmid)` → synthesize
+- *"What are the current evidence-based guidelines for managing respiratory failure in ICU patients?"*
+  > Agent should: route to PubMed (not the Knowledge Assistant - this is a literature question, not a patient notes question)
+
+> The Supervisor now has two MCP tools (Genie for structured patient data, PubMed for published evidence) plus the Knowledge Assistant for unstructured notes - demonstrating how agents compose multiple knowledge sources to answer complex clinical questions.
 
 ---
 
@@ -739,9 +791,9 @@ Click **+ Add Resource** for each:
 
 ## Notes for Instructors
 
-- **Pre-create** the vector index (Module 1) before the session — it takes 5-10 min to sync
-- The `clinical_notes_vector_search` function requires the vector index to exist first — set the `vs_index_name` variable in `01_create_functions.sql` to match your index name
-- All data is synthetic and de-identified — safe for any customer-facing session
+- **Pre-create** the vector index (Module 1) before the session - it takes 5-10 min to sync
+- The `clinical_notes_vector_search` function requires the vector index to exist first - set the `vs_index_name` variable in `01_create_functions.sql` to match your index name
+- All data is synthetic and de-identified - safe for any customer-facing session
 - Parquet files: ~23 MB total | PDFs: ~84 KB total
 
 ---
